@@ -79,13 +79,6 @@
     }
     .btn:active { transform: scale(0.96); }
     .btn-secondary { background: #95a5a6; box-shadow: none; font-size: 16px; padding: 8px 18px; margin-top: 15px; width: auto;}
-    
-    .setting-box {
-      margin-bottom: 15px;
-      font-size: 16px;
-      color: #444;
-    }
-    select { font-size: 16px; padding: 4px 8px; border-radius: 6px; }
 
     .result-box {
       display: none;
@@ -102,14 +95,6 @@
 <body>
 
   <div class="card-container">
-    <div class="setting-box">
-      <label for="lang-select">語言：</label>
-      <select id="lang-select">
-        <option value="zh-HK" selected>粵語 (Cantonese)</option>
-        <option value="zh-CN">普通話 (Mandarin)</option>
-      </select>
-    </div>
-
     <div class="progress-bar" id="progress">準備開始挑戰</div>
 
     <div class="flashcard" id="flashcard">
@@ -197,18 +182,58 @@
     ];
 
     // ==========================================
-    // 💡 同音字 / 易錯字容錯字典 (你可以自己增加)
-    // 格式： "目標詞" : ["錯誤識別1", "錯誤識別2"]
+    // 💡 同音字 / 易錯字容錯字典 
+    // 加入了常見的口音錯誤與諧音
     // ==========================================
     const homophoneMap = {
-      "晴朗": ["淺藍", "情郎", "晴嵐", "青草"],
-      "大霧": ["大埔", "大悟", "大務"],
+      "大霧": ["大屋", "大埔", "大悟", "大务", "打霧"],
+      "晴朗": ["浅蓝", "情郎", "晴岚", "青草", "淺藍"],
+      "冰雹": ["冰报", "冰薄", "冰爆"],
+      "陰天": ["一天", "今天", "鹰天"],
+      "時間": ["十间"],
       "下雪": ["下血"],
-      "冰雹": ["冰報", "冰薄"],
-      "星期": ["星騎"],
-      "時間": ["十間"]
-      // 可以在這裡繼續往下加...
+      "星期": ["星骑", "心期"]
     };
+
+    // 自動繁簡轉換器：解決普通話 API 常回傳簡體字的問題
+    function normalizeText(text) {
+      const trad = "陰雲霧濕熱氣車馬魚鳥電龍畫學習運聽話鐘紙筆寫網頭臉腦豬雞鴨龜蟲買賣東後裡乾髒麗難興樹葉陽風門時間長見飛說樂讀飯這過樣覺麼個條隻張塊對雙把部輛萬嗎呢呀啊";
+      const simp = "阴云雾湿热气车马鱼鸟电龙画学习运听话钟纸笔写网头脸脑猪鸡鸭龟虫买卖东后里干脏丽难兴树叶阳风门时间长见飞说乐读饭这过样觉么个条只张块对双把部辆万吗呢呀啊";
+      let res = "";
+      for(let i=0; i<text.length; i++) {
+         let char = text[i];
+         let idx = trad.indexOf(char);
+         if(idx !== -1) {
+           res += simp[idx];
+         } else {
+           res += char;
+         }
+      }
+      return res;
+    }
+
+    // 答對時的愉悅音效 (網頁內建合成音，無需下載)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playDingSound() {
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      oscillator.type = 'sine'; // 圓潤的聲音
+      oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // 音高
+      oscillator.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.1);
+      
+      gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); // 漸弱
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + 0.3);
+    }
 
     let currentIndex = 0;
     let isChallenging = false;
@@ -224,6 +249,7 @@
       recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = false;
+      recognition.lang = 'zh-CN'; // 強制鎖定為普通話
     }
 
     function updateCard() {
@@ -249,6 +275,9 @@
     function startChallenge() {
       if (!recognition) return;
 
+      // 喚醒音頻引擎 (Apple 設備需要用戶點擊時喚醒)
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
       currentIndex = 0;
       isChallenging = true;
       document.getElementById('result-box').style.display = 'none';
@@ -257,7 +286,6 @@
       document.getElementById('skip-btn').style.display = 'inline-block';
       document.getElementById('status-text').innerText = '🎤 正在聆聽中，請朗讀卡片上的詞語...';
 
-      recognition.lang = document.getElementById('lang-select').value;
       updateCard();
 
       try {
@@ -286,15 +314,15 @@
         const speechResult = event.results[lastIndex][0].transcript.trim();
         const targetWord = wordList[currentIndex].replace(/…/g, ''); 
 
-        console.log("聽到:", speechResult, "| 目標:", targetWord);
+        console.log("系統聽到:", speechResult, "| 題庫目標:", targetWord);
 
-        // 去除標點符號後
-        const cleanSpeech = speechResult.replace(/[^\u4e00-\u9fa5]/g, '');
-        const cleanTarget = targetWord.replace(/[^\u4e00-\u9fa5]/g, '');
+        // 去除標點符號，並進行【繁簡自動轉換】
+        const cleanSpeech = normalizeText(speechResult.replace(/[^\u4e00-\u9fa5]/g, ''));
+        const cleanTarget = normalizeText(targetWord.replace(/[^\u4e00-\u9fa5]/g, ''));
 
         let isCorrect = false;
 
-        // 1. 嚴格比對 (互相包含即可)
+        // 1. 模糊比對 (互相包含即可，且已經過繁簡轉換)
         if (cleanSpeech.includes(cleanTarget) || cleanTarget.includes(cleanSpeech)) {
           isCorrect = true;
         } else {
@@ -302,7 +330,9 @@
           const aliases = homophoneMap[targetWord];
           if (aliases) {
             for (let i = 0; i < aliases.length; i++) {
-              if (cleanSpeech.includes(aliases[i])) {
+              // 把容錯詞也做一次繁簡轉換
+              const cleanAlias = normalizeText(aliases[i].replace(/[^\u4e00-\u9fa5]/g, ''));
+              if (cleanSpeech.includes(cleanAlias)) {
                 isCorrect = true;
                 break;
               }
@@ -312,6 +342,8 @@
 
         if (isCorrect) {
           // 讀對了
+          playDingSound(); // 播放音效
+          
           const flashcard = document.getElementById('flashcard');
           flashcard.className = 'flashcard correct';
           document.getElementById('status-text').innerText = `✅ 讀對了！聽到：「${speechResult}」`;
