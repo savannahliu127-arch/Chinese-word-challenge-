@@ -196,6 +196,20 @@
       "肯定", "沒有", "只有", "只是", "覺得", "裏面", "幫助", "分享", "應該", "還是", "如果", "為什麼"
     ];
 
+    // ==========================================
+    // 💡 同音字 / 易錯字容錯字典 (你可以自己增加)
+    // 格式： "目標詞" : ["錯誤識別1", "錯誤識別2"]
+    // ==========================================
+    const homophoneMap = {
+      "晴朗": ["淺藍", "情郎", "晴嵐", "青草"],
+      "大霧": ["大埔", "大悟", "大務"],
+      "下雪": ["下血"],
+      "冰雹": ["冰報", "冰薄"],
+      "星期": ["星騎"],
+      "時間": ["十間"]
+      // 可以在這裡繼續往下加...
+    };
+
     let currentIndex = 0;
     let isChallenging = false;
     let recognition = null;
@@ -274,11 +288,29 @@
 
         console.log("聽到:", speechResult, "| 目標:", targetWord);
 
-        // 去除標點符號後比對
+        // 去除標點符號後
         const cleanSpeech = speechResult.replace(/[^\u4e00-\u9fa5]/g, '');
         const cleanTarget = targetWord.replace(/[^\u4e00-\u9fa5]/g, '');
 
+        let isCorrect = false;
+
+        // 1. 嚴格比對 (互相包含即可)
         if (cleanSpeech.includes(cleanTarget) || cleanTarget.includes(cleanSpeech)) {
+          isCorrect = true;
+        } else {
+          // 2. 容錯比對 (檢查字典裡有沒有這個詞的替代字)
+          const aliases = homophoneMap[targetWord];
+          if (aliases) {
+            for (let i = 0; i < aliases.length; i++) {
+              if (cleanSpeech.includes(aliases[i])) {
+                isCorrect = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (isCorrect) {
           // 讀對了
           const flashcard = document.getElementById('flashcard');
           flashcard.className = 'flashcard correct';
