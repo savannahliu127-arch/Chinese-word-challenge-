@@ -107,12 +107,12 @@
   </div>
 
   <script>
-    // 🔑 訊飛金鑰配置
+    // 🔑 訊飛金鑰憑證
     const APPID = "786de6ae";
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
 
-    // 放行分數門檻（百分制 25 分以上算讀對）
+    // 💡 後台過關分數門檻（換算為百分制後，高於 25 分代表發音基本吻合）
     const SILENT_PASS_SCORE = 25;
 
     // 889 個詞語庫
@@ -189,6 +189,7 @@
     let audioContext = null;
     let scriptProcessor = null;
 
+    let pcmAccumulator = []; // ⚡ 採樣點緩衝陣列
     let hasSpoken = false;
     let silenceStartTime = null;
     let maxTimeoutTimer = null;
@@ -282,7 +283,12 @@
       clearTimeout(maxTimeoutTimer);
       clearTimeout(analysisTimeout);
       stopAudioRecording();
-      if (ws) ws.close();
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.close();
+      }
       document.getElementById('start-btn').innerText = '重新開始';
       document.getElementById('start-btn').style.background = '#4a90e2';
       document.getElementById('skip-btn').style.display = 'none';
@@ -307,6 +313,7 @@
       hasSpoken = false;
       silenceStartTime = null;
       isEndingFrameSent = false;
+      pcmAccumulator = [];
       clearTimeout(maxTimeoutTimer);
       clearTimeout(analysisTimeout);
 
@@ -334,6 +341,7 @@
         ws.send(JSON.stringify(params));
         startAudioRecording();
 
+        // 💡 2.5 秒錄音上限保護
         maxTimeoutTimer = setTimeout(() => {
           finishSpeechAndSendEndFrame();
         }, 2500);
@@ -343,7 +351,6 @@
         try {
           const res = JSON.parse(event.data);
 
-          // 訊飛伺服器返回異常代碼，自動停止結算（防死鎖）
           if (res.code !== 0) {
             console.warn("訊飛返回狀態碼:", res);
             clearTimeout(analysisTimeout);
@@ -354,14 +361,8 @@
           if (res.data && res.data.data) {
             clearTimeout(analysisTimeout);
 
-            let xmlStr = "";
-            try {
-              xmlStr = atob(res.data.data);
-            } catch (e) {
-              console.error("Base64 解碼失敗:", e);
-              handleFail(currentWord);
-              return;
-            }
+            // 💡 使用 UTF-8 TextDecoder 進行安全的 Base64 解碼
+            let xmlStr = base64ToUtf8(res.data.data);
 
             let score = 0;
             try {
@@ -405,28 +406,52 @@
       };
     }
 
+    // 💡 安全 Base64 UTF-8 解碼函數
+    function base64ToUtf8(base64Str) {
+      const binaryStr = window.atob(base64Str);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+
     function finishSpeechAndSendEndFrame() {
       if (isEndingFrameSent) return;
-      isEndingFrameSent = true;
+      isEndingFrameSent = true; // ⚡ 立即關閉麥克風訊號寫入
 
       const currentWord = wordList[currentIndex].replace(/[…\.]/g, '');
+      stopAudioRecording();
 
       if (ws && ws.readyState === WebSocket.OPEN) {
+        // 發送殘留採樣數據
+        if (pcmAccumulator.length > 0) {
+          const pcmBuffer = convertFloat32To16BitPCM(pcmAccumulator);
+          pcmAccumulator = [];
+          if (pcmBuffer && pcmBuffer.byteLength > 0) {
+            ws.send(JSON.stringify({
+              business: { cmd: "auw", aus: 2 },
+              data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: arrayBufferToBase64(pcmBuffer) }
+            }));
+          }
+        }
+
+        // 發送訊飛結束指令 (aus: 4, status: 2)
         ws.send(JSON.stringify({
           business: { cmd: "auw", aus: 4 },
           data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", data: "" }
         }));
         document.getElementById('status-text').innerText = `⏳ 分析中...`;
 
-        // 💡 3 秒防卡死保底倒數：若訊飛無回應，自動結算結尾！
+        // 💡 2.5 秒保底結算倒數：防範網路漏包卡死
         analysisTimeout = setTimeout(() => {
-          console.warn("訊飛分析超時，自動結算");
+          console.warn("分析超時，自動結算");
           handleFail(currentWord);
-        }, 3000);
+        }, 2500);
       } else {
         handleFail(currentWord);
       }
-      stopAudioRecording();
     }
 
     function downsampleBuffer(buffer, sampleRate, outSampleRate = 16000) {
@@ -464,13 +489,14 @@
           const inputData = e.inputBuffer.getChannelData(0);
           const resampledData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
+          // 計算音量 RMS
           let sum = 0;
           for (let i = 0; i < resampledData.length; i++) {
             sum += resampledData[i] * resampledData[i];
           }
           const rms = Math.sqrt(sum / resampledData.length);
 
-          if (rms > 0.01) {
+          if (rms > 0.012) {
             hasSpoken = true;
             silenceStartTime = null;
           } else if (hasSpoken) {
@@ -481,15 +507,22 @@
             }
           }
 
-          const pcmData = convertTo16BitPCM(resampledData);
-          if (!pcmData || pcmData.byteLength === 0) return;
+          // ⚡ 將重採樣數據壓入緩衝區
+          for (let i = 0; i < resampledData.length; i++) {
+            pcmAccumulator.push(resampledData[i]);
+          }
 
-          const base64Data = arrayBufferToBase64(pcmData);
+          // ⚡ 嚴格以 1280 個採樣點（80ms PCM 數據包）進行分包發送
+          while (pcmAccumulator.length >= 1280) {
+            const chunk = pcmAccumulator.splice(0, 1280);
+            const pcmBuffer = convertFloat32To16BitPCM(chunk);
+            const base64Data = arrayBufferToBase64(pcmBuffer);
 
-          ws.send(JSON.stringify({
-            business: { cmd: "auw", aus: 2 },
-            data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: base64Data }
-          }));
+            ws.send(JSON.stringify({
+              business: { cmd: "auw", aus: 2 },
+              data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: base64Data }
+            }));
+          }
         };
 
         source.connect(scriptProcessor);
@@ -504,7 +537,7 @@
       if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
     }
 
-    function convertTo16BitPCM(input) {
+    function convertFloat32To16BitPCM(input) {
       const output = new Int16Array(input.length);
       for (let i = 0; i < input.length; i++) {
         const s = Math.max(-1, Math.min(1, input[i]));
