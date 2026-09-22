@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語朗讀大挑戰 (含音效與繁簡自動互通)</title>
+  <title>900 詞語朗讀大挑戰 (拼音自動比對高容錯版)</title>
+  <!-- 引入輕量級中文拼音庫，實現所有同音字自動識別 -->
+  <script src="https://unpkg.com/pinyin-pro"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
     body {
@@ -92,12 +94,12 @@
 </head>
 <body>
 
-  <!-- 提示聲效 -->
+  <!-- 音效 -->
   <audio id="success-sound" src="https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3" preload="auto"></audio>
   <audio id="fail-sound" src="https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3" preload="auto"></audio>
 
   <div class="card-container">
-    <div class="progress-bar" id="progress">準備開始挑戰 (普通話模式)</div>
+    <div class="progress-bar" id="progress">準備開始挑戰 (普通話拼音自動對應模式)</div>
 
     <div class="flashcard" id="flashcard">
       <div class="word" id="word-display">點擊下方開始</div>
@@ -183,120 +185,6 @@
       "肯定", "沒有", "只有", "只是", "覺得", "裏面", "幫助", "分享", "應該", "還是", "如果", "為什麼"
     ];
 
-    // 簡體自動轉繁體映射對照表 (確保簡體識別結果也能匹配)
-    const simpToTradMap = {
-      '阴':'陰', '雾':'霧', '闪':'閃', '电':'電', '台':'颱', '风':'風', '凉':'涼', '湿':'濕', '热':'熱', '倾':'傾', 
-      '云':'雲', '布':'佈', '阳':'陽', '时':'時', '周':'週', '气':'氣', '节':'節', '庆':'慶', '圣':'聖', '诞':'誕', 
-      '复':'復', '万':'萬', '寿':'壽', '亲':'親', '学':'學', '校':'校', '厅':'廳', '课':'課', '图':'圖', '馆':'館', 
-      '警':'警', '铁':'鐵', '场':'場', '买':'買', '卖':'賣', '货':'貨', '欧':'歐', '洲':'洲', '亚':'亞', '叶':'葉', 
-      '蓝':'藍', '绿':'綠', '黄':'黃', '红':'紅', '银':'銀', '灿':'燦', '烂':'爛', '猫':'貓', '鸡':'雞', '鸭':'鴨', 
-      '猪':'豬', '马':'馬', '鸟':'鳥', '鱼':'魚', '鼠':'鼠', '猴':'猴', '兔':'兔', '狮':'獅', '熊':'熊', '象':'象', 
-      '虎':'虎', '狐':'狐', '狸':'狸', '鲸':'鯨', '龟':'烏', '鲨':'鯊', '鹅':'鵝', '鳄':'鱷', '猩':'猩', '袋':'袋', 
-      '仓':'倉', '龙':'龍', '鹰':'鷹', '长':'長', '颈':'頸', '鹿':'鹿', '蜥':'蜥', '蜴':'蜴', '蚁':'蟻', '虫':'蟲', 
-      '飞':'飛', '蛾':'蛾', '带':'帶', '进':'進', '开':'開', '欢':'歡', '见':'見', '摆':'擺', '划':'劃', '游':'遊', 
-      '戏':'戲', '读':'讀', '书':'書', '说':'說', '话':'話', '睡':'睡', '觉':'覺', '脸':'臉', '运':'運', '动':'動', 
-      '写':'寫', '扫':'掃', '赛':'賽', '聊':'聊', '发':'發', '现':'現', '认':'認', '识':'識', '表':'表', '演':'演', 
-      '饭':'飯', '设':'設', '梦':'夢', '听':'聽', '闭':'閉', '骑':'騎', '车':'車', '体':'體', '钢':'鋼', '琴':'琴', 
-      '视':'視', '网':'網', '乐':'樂', '泪':'淚', '坏':'壞', '软':'軟', '两':'兩', '实':'實', '里':'裏', '丑':'醜', 
-      '圆':'圓', '弯':'彎', '宽':'寬', '难':'難', '干':'乾', '净':'淨', '肮':'骯', '脏':'髒', '乱':'亂', '丽':'麗', 
-      '劳':'勞', '聪':'聰', '顽':'頑', '温':'溫', '强':'強', '壮':'壯', '恶':'惡', '沉':'沉', '鲜':'鮮', '面':'麵', 
-      '糖':'糖', '饼':'餅', '糕':'糕', '肠':'腸', '寿':'壽', '汁':'汁', '点':'點', '条':'條', '翅':'翅', '排':'排', 
-      '堡':'堡', '柠':'檸', '檬':'檬', '巧':'巧', '克':'克', '披':'披', '萨':'薩', '淋':'淋', '包':'包', '笔':'筆', 
-      '胶':'膠', '剪':'剪', '套':'套', '纸':'紙', '壶':'壺', '贴':'貼', '册':'冊', '典':'典', '奖':'獎', '擦':'擦', 
-      '尺':'尺', '板':'板', '柜':'櫃', '报':'報', '卷':'捲', '提':'提', '颜':'顏', '圆':'原', '圈':'圈', '盒':'盒', 
-      '伞':'傘', '钟':'鐘', '巾':'巾', '毯':'氈', '缸':'缸', '帘':'簾', '刷':'刷', '膏':'膏', '碟':'碟', '梳':'梳', 
-      '叉':'叉', '筷':'筷', '具':'具', '钱':'錢', '床':'床', '罩':'罩', '娃':'娃', '洁':'潔', '剂':'劑', '灯':'燈', 
-      '扇':'扇', '箱':'箱', '调':'調', '脑':'腦', '机':'機', '荧':'螢', '幕':'幕', '频':'頻', '裤':'褲', '帽':'帽', 
-      '镜':'鏡', '裙':'裙', '鞋':'鞋', '袜':'襪', '饰':'飾', '缆':'纜', '苍':'蒼', '杂':'雜', '渐':'漸', '蒙':'濛', 
-      '金':'金', '乌':'烏', '澄':'澄', '白':'白', '茫':'茫', '黑':'黑', '亮':'亮', '晶':'晶', '傻':'傻', '汪':'汪', 
-      '嘻':'嘻', '喷':'噴', '飘':'飄', '呵':'呵', '腾':'騰', '茸':'茸', '墩':'墩', '伤':'傷', '情':'情', '羡':'羨', 
-      '慕':'慕', '担':'擔', '兴':'興', '奋':'奮', '积':'積', '极':'極', '闷':'悶', '惊':'驚', '讶':'訝', '无':'無', 
-      '奈':'奈', '爱':'愛', '恨':'恨', '只':'隻', '张':'張', '块':'塊', '对':'對', '颗':'顆', '双':'雙', '杯':'杯', 
-      '串':'串', '瓶':'瓶', '罐':'罐', '盒':'盒', '封':'封', '架':'架', '部':'部', '辆':'輛', '艘':'艘', '朵':'朵', 
-      '铛':'鐺', '哗':'嘩', '叽':'嘰', '边':'邊', '为':'為', '随':'隨', '虽':'雖', '还':'還', '先':'先', '接':'接', 
-      '着':'著', '后':'後', '最':'最', '让':'讓', '会':'會', '极':'極', '谁':'誰', '哪':'哪', '这':'這', '么':'麼', 
-      '那':'那', '样':'樣', '可':'可', '经':'經', '非':'非', '已':'已', '感':'感', '特':'特', '别':'別', '肯':'肯', 
-      '定':'定', '没':'沒', '觉':'覺', '帮':'幫', '助':'助', '享':'享', '应':'應', '该':'該', '什':'什'
-    };
-
-    function simpToTrad(str) {
-      return str.split('').map(char => simpToTradMap[char] || char).join('');
-    }
-
-    // 💡 同音字 / 易錯字 高度容錯字典
-    const toleranceDict = {
-      "陰天": ["阴天", "一天", "英天"],
-      "晴朗": ["淺藍", "情郎", "晴嵐", "請朗"],
-      "大霧": ["大埔", "大悟", "大屋", "大悟", "答物", "大雾"],
-      "閃電": ["闪电", "閃殿", "閃店"],
-      "冰雹": ["冰報", "冰薄"],
-      "下雪": ["下血"],
-      "雲霧": ["雲木", "雲屋"],
-      "霧霾": ["物埋", "烏麥"],
-      "黃昏": ["黃婚"],
-      "洗手間": ["洗手門"],
-      "蝴蝶": ["胡蝶"],
-      "蜥蜴": ["西醫", "洗衣", "吸血"],
-      "企鵝": ["起額", "氣鵝"],
-      "鱷魚": ["惡魚", "餓魚"],
-      "袋鼠": ["帶鼠", "大叔"],
-      "倉鼠": ["蒼鼠", "蔥鼠"],
-      "恐龍": ["孔龍"],
-      "毛毛蟲": ["貓貓蟲"],
-      "蟑螂": ["張郎", "髒郎"],
-      "冥想": ["明想", "名想", "民想"],
-      "潛水": ["錢水", "前水", "淺水"],
-      "滑冰": ["花冰", "滑冰", "話冰"],
-      "打網球": ["打王球", "打網球"],
-      "打乒乓球": ["打兵乓球"],
-      "醜": ["抽", "瞅"],
-      "骯髒": ["安髒"],
-      "獼猴桃": ["迷猴桃"],
-      "薄餅": ["波餅"],
-      "手冊": ["手冊", "手測", "手車"],
-      "板擦": ["板叉", "版擦"],
-      "捲筆刀": ["卷筆刀", "簡筆刀"],
-      "原珠筆": ["圓珠筆"],
-      "固體膠": ["固體交"],
-      "膠棒": ["交棒", "澆棒"],
-      "碗碟": ["晚碟", "玩碟"],
-      "勺子": ["少子"],
-      "潔手液": ["結手液", "洗手液"],
-      "屏幕": ["屏目", "平幕", "螢幕"],
-      "視頻": ["視平", "視頻", "四平"],
-      "視像鏡頭": ["市像鏡頭", "攝像頭"],
-      "社服": ["設服"],
-      "頭箍": ["頭孤", "頭姑"],
-      "遊艇": ["油艇", "有艇"],
-      "潛艇": ["錢艇", "前艇"],
-      "直昇機": ["直升機"],
-      "太空飛船": ["太空飛泉"],
-      "深淺": ["伸淺", "生錢"],
-      "紅通通": ["紅彤彤", "紅洞洞"],
-      "紅彤彤": ["紅通通", "紅統統"],
-      "灰濛濛": ["灰蒙蒙"],
-      "烏溜溜": ["屋溜溜"],
-      "黃澄澄": ["黃成成", "黃澄澄"],
-      "白茫茫": ["白忙忙"],
-      "黑漆漆": ["黑七七", "黑漆漆"],
-      "亮晶晶": ["亮金金"],
-      "傻呼呼": ["傻乎乎"],
-      "香噴噴": ["香盆盆", "香噴噴"],
-      "輕飄飄": ["青飄飄"],
-      "冷冰冰": ["冷兵兵"],
-      "熱騰騰": ["熱疼疼"],
-      "圓呼呼": ["圓乎乎"],
-      "毛茸茸": ["毛絨絨", "毛容容"],
-      "胖墩墩": ["胖蹲蹲"],
-      "髒兮兮": ["髒西西"],
-      "羨慕": ["線幕", "羡慕"],
-      "妒忌": ["肚忌", "度忌", "毒氣"],
-      "吱吱喳喳": ["知知喳喳"],
-      "乒乒乓乓": ["冰冰邦邦", "兵兵乓乓"],
-      "嘰哩呱啦": ["機里呱啦", "基里呱啦"],
-      "嘰哩咕嚕": ["機里咕嚕", "基里咕嚕"]
-    };
-
     let currentIndex = 0;
     let isChallenging = false;
     let recognition = null;
@@ -313,6 +201,25 @@
       recognition.continuous = true;
       recognition.interimResults = false;
       recognition.lang = 'zh-CN'; // 普通話模式
+    }
+
+    // 取得拼音（不帶聲調）
+    function getPinyinStr(text) {
+      if (window.pinyinPro && window.pinyinPro.pinyin) {
+        return window.pinyinPro.pinyin(text, { toneType: 'none', type: 'array' }).join('').toLowerCase();
+      }
+      return '';
+    }
+
+    // 模糊拼音轉換（忽略前後鼻音與平捲舌）
+    function getFuzzyPinyinStr(py) {
+      return py.replace(/zh/g, 'z')
+               .replace(/ch/g, 'c')
+               .replace(/sh/g, 's')
+               .replace(/ing/g, 'in')
+               .replace(/eng/g, 'en')
+               .replace(/ang/g, 'an')
+               .replace(/l/g, 'n');
     }
 
     function updateCard() {
@@ -376,7 +283,6 @@
         const lastIndex = event.results.length - 1;
         const speechResult = event.results[lastIndex][0].transcript.trim();
         const rawTargetWord = wordList[currentIndex];
-        
         const targetWord = rawTargetWord.replace(/[…\.]/g, ''); 
 
         console.log("聽到的音:", speechResult, "| 目標詞:", targetWord);
@@ -384,23 +290,26 @@
         const cleanSpeech = speechResult.replace(/[^一-龥]/g, '');
         const cleanTarget = targetWord.replace(/[^一-龥]/g, '');
 
-        // 將識別到的文字自動轉換成繁體再比對
-        const tradSpeech = simpToTrad(cleanSpeech);
-
         let isCorrect = false;
 
-        // 1. 精確比對 (繁體/簡體均可匹配)
-        if (cleanSpeech.includes(cleanTarget) || tradSpeech.includes(cleanTarget)) {
+        // 1. 精確文字比對
+        if (cleanSpeech.includes(cleanTarget)) {
           isCorrect = true;
-        } 
-        // 2. 容錯字典比對
-        else if (toleranceDict[rawTargetWord]) {
-          const alts = toleranceDict[rawTargetWord];
-          for (let i = 0; i < alts.length; i++) {
-            if (cleanSpeech.includes(alts[i]) || tradSpeech.includes(alts[i])) {
+        } else {
+          // 2. 拼音比對引擎 (將中文轉換成拼音進行比對)
+          const targetPy = getPinyinStr(cleanTarget);
+          const speechPy = getPinyinStr(cleanSpeech);
+
+          if (targetPy && speechPy && speechPy.includes(targetPy)) {
+            isCorrect = true;
+            console.log(`✅ 拼音比對成功！【${cleanTarget}】(${targetPy}) == 【${cleanSpeech}】(${speechPy})`);
+          } else if (targetPy && speechPy) {
+            // 3. 模糊拼音比對 (容許口音雜音)
+            const fuzzyTargetPy = getFuzzyPinyinStr(targetPy);
+            const fuzzySpeechPy = getFuzzyPinyinStr(speechPy);
+            if (fuzzySpeechPy.includes(fuzzyTargetPy)) {
               isCorrect = true;
-              console.log(`觸發容錯機制：目標【${rawTargetWord}】，聽到「${alts[i]}」視為正確。`);
-              break;
+              console.log(`✅ 模糊拼音比對成功！【${cleanTarget}】(${fuzzyTargetPy}) == 【${cleanSpeech}】(${fuzzySpeechPy})`);
             }
           }
         }
@@ -453,15 +362,9 @@
       const resultBox = document.getElementById('result-box');
       const resultInfo = document.getElementById('result-info');
 
-      let tipHtml = "";
-      if (toleranceDict[targetWord]) {
-        tipHtml = `<br><span style="font-size:16px; color:#7f8c8d;">💡 提示：此詞允許的近音字包括 (${toleranceDict[targetWord].join(', ')})</span>`;
-      }
-
       resultInfo.innerHTML = `
         你在第 <b>${failNum}</b> 個詞【<span style="color:#2980b9">${targetWord}</span>】失敗了！<br>
-        系統聽到的是：「<b>${heardText || "未聽到聲音"}</b>」<br>
-        ${tipHtml}<br><br>
+        系統聽到的是：「<b>${heardText || "未聽到聲音"}</b>」<br><br>
         🏆 最終成績：成功連續通過了 <b>${currentIndex}</b> 個詞！
       `;
       resultBox.style.display = 'block';
