@@ -371,9 +371,10 @@
       isEndingFrameSent = true;
 
       if (ws && ws.readyState === WebSocket.OPEN) {
+        // 💡 修正：語音評測數據欄位名稱應為 data，非 audio
         ws.send(JSON.stringify({
           business: { cmd: "auw", aus: 4 },
-          data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", audio: "" }
+          data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", data: "" }
         }));
         document.getElementById('status-text').innerText = `⏳ 正在評測中...`;
       }
@@ -439,9 +440,10 @@
           const pcmData = convertTo16BitPCM(resampledData);
           const base64Data = arrayBufferToBase64(pcmData);
 
+          // 💡 修正：語音評測數據欄位名稱應為 data，非 audio
           ws.send(JSON.stringify({
             business: { cmd: "auw", aus: 2 },
-            data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", audio: base64Data }
+            data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: base64Data }
           }));
         };
 
