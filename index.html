@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <title>900 詞語認讀大挑戰 (原生極速版)</title>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
     body {
@@ -36,6 +35,17 @@
       display: inline-block;
       margin-bottom: 12px;
       font-size: 18px;
+    }
+    .high-score-badge {
+      background: #f1c40f;
+      color: #7f6000;
+      font-weight: bold;
+      padding: 6px 16px;
+      border-radius: 20px;
+      display: inline-block;
+      margin-bottom: 12px;
+      font-size: 14px;
+      margin-left: 8px;
     }
     .progress-bar {
       font-size: 16px;
@@ -87,7 +97,10 @@
 <body>
 
   <div class="card-container">
-    <div class="count-badge" id="count-display">📚 已成功認讀：0 個詞</div>
+    <div>
+      <div class="count-badge" id="count-display">📚 本次認讀：0 個詞</div>
+      <div class="high-score-badge" id="high-score-display">🏆 最高紀錄：0</div>
+    </div>
     <div class="progress-bar" id="progress">準備開始認讀大挑戰</div>
 
     <div class="flashcard" id="flashcard">
@@ -107,13 +120,52 @@
   </div>
 
   <script>
-    // 🔑 訊飛金鑰憑證
-    const APPID = "786de6ae";
-    const API_KEY = "257eca19b10379c91888b8453c93b994";
-    const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
-
-    // 💡 後台過關分數門檻（換算為百分制後，高於 25 分代表發音基本吻合）
-    const SILENT_PASS_SCORE = 25;
+    // 💡 常用 Siri 語音辨識誤判同音詞字典（可自由補充）
+    const homophoneMap = {
+      "打雷": ["打理", "大理", "咖哩", "打擂", "答雷", "大雷"],
+      "陰天": ["今天", "一天", "英天", "應天"],
+      "晴天": ["請天", "清天", "青天", "擎天"],
+      "下雨": ["夏雨", "下與", "下語"],
+      "太陽": ["太洋", "大陽"],
+      "月亮": ["越亮", "嶽亮"],
+      "彩虹": ["採紅", "彩紅"],
+      "閃電": ["刪電", "山電"],
+      "颱風": ["台風", "抬風"],
+      "涼快的": ["涼快", "涼快得"],
+      "寒冷的": ["寒冷", "韓冷"],
+      "雲霧": ["雲物", "勻霧"],
+      "刮風": ["掛風", "瓜風"],
+      "炎熱的": ["炎熱", "鹽熱"],
+      "今天": "陰天",
+      "昨天": ["做天", "坐天"],
+      "明天": ["名天", "銘天"],
+      "小息": ["小膝", "小西", "休息"],
+      "天天": ["甜甜", "田田"],
+      "黃昏": ["黃婚", "皇昏"],
+      "早上": ["藻上", "找上"],
+      "中午": ["中五", "忠午"],
+      "下午": ["下五"],
+      "晚上": ["晚雙"],
+      "以前": ["依前", "移前"],
+      "從前": ["重前", "崇前"],
+      "以後": ["依後", "移後"],
+      "現在": ["現再", "限在"],
+      "去年": ["趣年"],
+      "今年": ["金年", "津年"],
+      "週末": ["週末", "週木"],
+      "上課": ["尚課"],
+      "下課": ["夏課"],
+      "季節": ["季節", "既節"],
+      "小時": ["小事", "小市"],
+      "學校": ["雪校", "血校"],
+      "教室": ["較室", "教是"],
+      "操場": ["草場", "槽場"],
+      "餐廳": ["餐廳", "燦廳"],
+      "禮堂": ["李堂", "理堂"],
+      "課室": ["客室", "刻室"],
+      "公園": ["公員", "工園"],
+      "廁所": ["側所", "冊所"]
+    };
 
     // 889 個詞語庫
     const wordList = [
@@ -184,19 +236,10 @@
 
     let currentIndex = 0;
     let isChallenging = false;
-    let ws = null;
-    let mediaStream = null;
+    let recognition = null;
     let audioContext = null;
-    let scriptProcessor = null;
 
-    let pcmAccumulator = []; // ⚡ 採樣點緩衝陣列
-    let hasSpoken = false;
-    let silenceStartTime = null;
-    let maxTimeoutTimer = null;
-    let analysisTimeout = null;
-    let isEndingFrameSent = false;
-
-    // 🔊 雙音階歡慶音效
+    // 🔊 雙音階歡慶聲效
     function playSuccessChime() {
       try {
         const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -240,6 +283,12 @@
       } catch(e) {}
     }
 
+    function loadHighScore() {
+      const savedScore = localStorage.getItem('vocab_challenge_max') || 0;
+      document.getElementById('high-score-display').innerText = `🏆 最高紀錄：${savedScore}`;
+      return parseInt(savedScore);
+    }
+
     function updateCard() {
       if (currentIndex >= wordList.length) {
         endChallenge(true);
@@ -247,7 +296,7 @@
       }
       document.getElementById('progress').innerText = `第 ${currentIndex + 1} / ${wordList.length} 個詞`;
       document.getElementById('word-display').innerText = wordList[currentIndex];
-      document.getElementById('count-display').innerText = `📚 已成功認讀：${currentIndex} 個詞`;
+      document.getElementById('count-display').innerText = `📚 本次認讀：${currentIndex} 個詞`;
       document.getElementById('flashcard').className = 'flashcard';
     }
 
@@ -260,12 +309,14 @@
     }
 
     function startChallenge() {
-      if (!audioContext) {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert("您的瀏覽器不支援原生語音辨識，請務必使用 iPad Safari 瀏覽器開啓此網頁！");
+        return;
       }
-      if (audioContext.state === 'suspended') {
-        audioContext.resume();
-      }
+
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') audioContext.resume();
 
       currentIndex = 0;
       isChallenging = true;
@@ -275,19 +326,16 @@
       document.getElementById('skip-btn').style.display = 'inline-block';
       
       updateCard();
-      startEvaluateCurrentWord();
+      initSpeechRecognition();
     }
 
     function stopChallenge() {
       isChallenging = false;
-      clearTimeout(maxTimeoutTimer);
-      clearTimeout(analysisTimeout);
-      stopAudioRecording();
-      if (ws) {
-        ws.onopen = null;
-        ws.onmessage = null;
-        ws.onerror = null;
-        ws.close();
+      if (recognition) {
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.onend = null;
+        try { recognition.stop(); } catch(e) {}
       }
       document.getElementById('start-btn').innerText = '重新開始';
       document.getElementById('start-btn').style.background = '#4a90e2';
@@ -295,326 +343,159 @@
       document.getElementById('status-text').innerText = '挑戰已停止';
     }
 
-    function getWebSocketUrl() {
-      const host = "ise-api.xfyun.cn";
-      const date = new Date().toUTCString();
-      const requestLine = "GET /v2/open-ise HTTP/1.1";
-      const signatureOrigin = `host: ${host}\ndate: ${date}\n${requestLine}`;
-      const signatureSha = CryptoJS.HmacSHA256(signatureOrigin, API_SECRET);
-      const signature = CryptoJS.enc.Base64.stringify(signatureSha);
-      const authorizationOrigin = `api_key="${API_KEY}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`;
-      const authorization = encodeURIComponent(btoa(authorizationOrigin));
-      return `wss://${host}/v2/open-ise?authorization=${authorization}&date=${encodeURIComponent(date)}&host=${host}`;
-    }
-
-    function startEvaluateCurrentWord() {
+    function initSpeechRecognition() {
       if (!isChallenging) return;
 
-      hasSpoken = false;
-      silenceStartTime = null;
-      isEndingFrameSent = false;
-      pcmAccumulator = [];
-      clearTimeout(maxTimeoutTimer);
-      clearTimeout(analysisTimeout);
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.lang = 'zh-CN'; // 設定普通話辨識
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
-      const currentWord = wordList[currentIndex].replace(/[…\.]/g, '');
-      document.getElementById('status-text').innerText = `🎤 請認讀【${currentWord}】...`;
+      const targetWord = wordList[currentIndex].replace(/[…\.]/g, '');
+      document.getElementById('status-text').innerText = `🎤 請認讀【${targetWord}】...`;
 
-      const url = getWebSocketUrl();
-      ws = new WebSocket(url);
+      recognition.onresult = (event) => {
+        if (!isChallenging) return;
+        const heardText = event.results[0][0].transcript.trim();
+        console.log(`聽到的語音：[${heardText}]，目標詞語：[${targetWord}]`);
 
-      ws.onopen = () => {
-        const params = {
-          common: { app_id: APPID },
-          business: {
-            category: "read_word",
-            sub: "ise",
-            ent: "cn_vip",
-            cmd: "ssb",
-            text: `\uFEFF[ise]\nlanguage=zh_cn\ncategory=read_word\n${currentWord}`,
-            tte: "utf-8",
-            auf: "audio/L16;rate=16000",
-            aus: 1
-          },
-          data: { status: 0 }
-        };
-        ws.send(JSON.stringify(params));
-        startAudioRecording();
-
-        // 💡 2.5 秒錄音上限保護
-        maxTimeoutTimer = setTimeout(() => {
-          finishSpeechAndSendEndFrame();
-        }, 2500);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const res = JSON.parse(event.data);
-
-          if (res.code !== 0) {
-            console.warn("訊飛返回狀態碼:", res);
-            clearTimeout(analysisTimeout);
-            handleFail(currentWord);
-            return;
-          }
-
-          if (res.data && res.data.data) {
-            clearTimeout(analysisTimeout);
-
-            // 💡 使用 UTF-8 TextDecoder 進行安全的 Base64 解碼
-            let xmlStr = base64ToUtf8(res.data.data);
-
-            let score = 0;
-            try {
-              const parser = new DOMParser();
-              const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
-              const totalScoreElem = xmlDoc.querySelector("read_word") || xmlDoc.querySelector("rec_paper");
-              
-              if (totalScoreElem && totalScoreElem.getAttribute("total_score")) {
-                score = parseFloat(totalScoreElem.getAttribute("total_score"));
-              } else if (xmlDoc.documentElement && xmlDoc.documentElement.getAttribute("total_score")) {
-                score = parseFloat(xmlDoc.documentElement.getAttribute("total_score"));
-              }
-            } catch(e) {
-              console.error("XML 解析失敗:", e);
-            }
-
-            let normalizedScore = score;
-            if (score > 0 && score <= 5) {
-              normalizedScore = score * 20;
-            }
-
-            console.log(`訊飛評測【${currentWord}】原始得分：${score}，換算後：${normalizedScore}`);
-
-            if (normalizedScore >= SILENT_PASS_SCORE) {
-              handleSuccess();
-            } else {
-              handleFail(currentWord);
-            }
-          }
-        } catch (err) {
-          console.error("onmessage 處理異常:", err);
-          clearTimeout(analysisTimeout);
-          handleFail(currentWord);
+        if (checkMatch(heardText, targetWord)) {
+          handleSuccess();
+        } else {
+          handleFail(targetWord, heardText);
         }
       };
 
-      ws.onerror = (err) => {
-        console.error("連線錯誤:", err);
-        clearTimeout(analysisTimeout);
-        handleFail(currentWord);
+      recognition.onerror = (event) => {
+        console.warn("語音辨識提示:", event.error);
+        if (event.error === 'no-speech' && isChallenging) {
+          // 若沒聽清楚，重啟辨識繼續聽
+          restartListening();
+        }
       };
-    }
 
-    // 💡 安全 Base64 UTF-8 解碼函數
-    function base64ToUtf8(base64Str) {
-      const binaryStr = window.atob(base64Str);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
+      recognition.onend = () => {
+        if (isChallenging) {
+          // 防止辨識中斷，自動保持收聽 state
+          restartListening();
+        }
+      };
+
+      try {
+        recognition.start();
+      } catch(e) {
+        console.log("Recognition start Exception:", e);
       }
-      return new TextDecoder("utf-8").decode(bytes);
     }
 
-    function finishSpeechAndSendEndFrame() {
-      if (isEndingFrameSent) return;
-      isEndingFrameSent = true; // ⚡ 立即關閉麥克風訊號寫入
+    function restartListening() {
+      if (!isChallenging) return;
+      try {
+        recognition.start();
+      } catch(e) {}
+    }
 
-      const currentWord = wordList[currentIndex].replace(/[…\.]/g, '');
-      stopAudioRecording();
+    // 💡 智能匹配演算法：包含比對 + 同音詞字典比對
+    function checkMatch(heard, target) {
+      if (!heard || !target) return false;
+      
+      // 1. 完全或子字串包含比對
+      if (heard.includes(target) || target.includes(heard)) return true;
 
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        // 發送殘留採樣數據
-        if (pcmAccumulator.length > 0) {
-          const pcmBuffer = convertFloat32To16BitPCM(pcmAccumulator);
-          pcmAccumulator = [];
-          if (pcmBuffer && pcmBuffer.byteLength > 0) {
-            ws.send(JSON.stringify({
-              business: { cmd: "auw", aus: 2 },
-              data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: arrayBufferToBase64(pcmBuffer) }
-            }));
+      // 2. 清理標點符號後比對
+      const cleanHeard = heard.replace(/[^\u4e00-\u9fa5]/g, '');
+      const cleanTarget = target.replace(/[^\u4e00-\u9fa5]/g, '');
+      if (cleanHeard.includes(cleanTarget) || cleanTarget.includes(cleanHeard)) return true;
+
+      // 3. 同音詞字典相容性比對
+      if (homophoneMap[target]) {
+        const aliases = Array.isArray(homophoneMap[target]) ? homophoneMap[target] : [homophoneMap[target]];
+        for (let alias of aliases) {
+          if (cleanHeard.includes(alias) || alias.includes(cleanHeard)) {
+            return true;
           }
         }
-
-        // 發送訊飛結束指令 (aus: 4, status: 2)
-        ws.send(JSON.stringify({
-          business: { cmd: "auw", aus: 4 },
-          data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", data: "" }
-        }));
-        document.getElementById('status-text').innerText = `⏳ 分析中...`;
-
-        // 💡 2.5 秒保底結算倒數：防範網路漏包卡死
-        analysisTimeout = setTimeout(() => {
-          console.warn("分析超時，自動結算");
-          handleFail(currentWord);
-        }, 2500);
-      } else {
-        handleFail(currentWord);
       }
-    }
 
-    function downsampleBuffer(buffer, sampleRate, outSampleRate = 16000) {
-      if (outSampleRate >= sampleRate) return buffer;
-      const sampleRateRatio = sampleRate / outSampleRate;
-      const newLength = Math.round(buffer.length / sampleRateRatio);
-      const result = new Float32Array(newLength);
-      let offsetResult = 0;
-      let offsetBuffer = 0;
-      while (offsetResult < result.length) {
-        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
-        let accum = 0, count = 0;
-        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
-          accum += buffer[i];
-          count++;
-        }
-        result[offsetResult] = count > 0 ? accum / count : 0;
-        offsetResult++;
-        offsetBuffer = nextOffsetBuffer;
-      }
-      return result;
-    }
-
-    function startAudioRecording() {
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        mediaStream = stream;
-        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioContext.state === 'suspended') audioContext.resume();
-
-        const source = audioContext.createMediaStreamSource(stream);
-        scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
-
-        scriptProcessor.onaudioprocess = (e) => {
-          if (!isChallenging || !ws || ws.readyState !== WebSocket.OPEN || isEndingFrameSent) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          const resampledData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
-
-          // 計算音量 RMS
-          let sum = 0;
-          for (let i = 0; i < resampledData.length; i++) {
-            sum += resampledData[i] * resampledData[i];
-          }
-          const rms = Math.sqrt(sum / resampledData.length);
-
-          if (rms > 0.012) {
-            hasSpoken = true;
-            silenceStartTime = null;
-          } else if (hasSpoken) {
-            if (!silenceStartTime) silenceStartTime = Date.now();
-            if (Date.now() - silenceStartTime > 400) {
-              finishSpeechAndSendEndFrame();
-              return;
-            }
-          }
-
-          // ⚡ 將重採樣數據壓入緩衝區
-          for (let i = 0; i < resampledData.length; i++) {
-            pcmAccumulator.push(resampledData[i]);
-          }
-
-          // ⚡ 嚴格以 1280 個採樣點（80ms PCM 數據包）進行分包發送
-          while (pcmAccumulator.length >= 1280) {
-            const chunk = pcmAccumulator.splice(0, 1280);
-            const pcmBuffer = convertFloat32To16BitPCM(chunk);
-            const base64Data = arrayBufferToBase64(pcmBuffer);
-
-            ws.send(JSON.stringify({
-              business: { cmd: "auw", aus: 2 },
-              data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: base64Data }
-            }));
-          }
-        };
-
-        source.connect(scriptProcessor);
-        scriptProcessor.connect(audioContext.destination);
-      }).catch(err => {
-        alert("無法獲取麥克風權限: " + err);
-      });
-    }
-
-    function stopAudioRecording() {
-      if (scriptProcessor) scriptProcessor.disconnect();
-      if (mediaStream) mediaStream.getTracks().forEach(track => track.stop());
-    }
-
-    function convertFloat32To16BitPCM(input) {
-      const output = new Int16Array(input.length);
-      for (let i = 0; i < input.length; i++) {
-        const s = Math.max(-1, Math.min(1, input[i]));
-        output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      }
-      return output.buffer;
-    }
-
-    function arrayBufferToBase64(buffer) {
-      let binary = '';
-      const bytes = new Uint8Array(buffer);
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return window.btoa(binary);
+      return false;
     }
 
     function handleSuccess() {
-      clearTimeout(analysisTimeout);
-      stopAudioRecording();
-      if (ws) ws.close();
-
       playSuccessChime();
       document.getElementById('flashcard').className = 'flashcard correct';
       document.getElementById('status-text').innerText = `✨ 認讀正確！`;
 
       currentIndex++;
+      if (recognition) {
+        recognition.onend = null;
+        try { recognition.stop(); } catch(e) {}
+      }
+
       setTimeout(() => {
         if (isChallenging) {
           updateCard();
-          startEvaluateCurrentWord();
+          initSpeechRecognition();
         }
-      }, 400);
+      }, 300);
     }
 
-    function handleFail(targetWord) {
-      clearTimeout(analysisTimeout);
-      stopAudioRecording();
-      if (ws) ws.close();
-
+    function handleFail(targetWord, heardText) {
       playFailBuzz();
       document.getElementById('flashcard').className = 'flashcard wrong';
+      
+      const count = currentIndex;
+      const currentMax = loadHighScore();
+      let isNewRecord = false;
+
+      if (count > currentMax) {
+        localStorage.setItem('vocab_challenge_max', count);
+        loadHighScore();
+        isNewRecord = true;
+      }
+
       stopChallenge();
 
       const resultBox = document.getElementById('result-box');
       const resultTitle = document.getElementById('result-title');
       const resultInfo = document.getElementById('result-info');
 
-      resultTitle.innerText = "🎯 挑戰結束";
+      resultTitle.innerText = isNewRecord ? "🎉 恭喜刷新最高紀錄！" : "🎯 挑戰結束";
       resultInfo.innerHTML = `
-        認讀【<span style="color:#e74c3c">${targetWord}</span>】時未通過。<br><br>
-        📚 本次共成功累計認讀了 <b>${currentIndex}</b> 個詞語！
+        認讀【<span style="color:#e74c3c">${targetWord}</span>】時停止（聽到："${heardText}"）。<br><br>
+        📚 本次共成功認讀了 <b>${count}</b> 個詞語！<br>
+        ${isNewRecord ? "🌟 成功創下新的個人最高紀錄！" : "繼續加油，超越最高紀錄！"}
       `;
       resultBox.style.display = 'block';
     }
 
     function skipWord() {
       if (!isChallenging) return;
-      clearTimeout(maxTimeoutTimer);
-      clearTimeout(analysisTimeout);
-      stopAudioRecording();
-      if (ws) ws.close();
+      if (recognition) {
+        recognition.onend = null;
+        try { recognition.stop(); } catch(e) {}
+      }
       currentIndex++;
       updateCard();
-      startEvaluateCurrentWord();
+      initSpeechRecognition();
     }
 
     function endChallenge(isWin) {
       stopChallenge();
+      const count = currentIndex;
+      localStorage.setItem('vocab_challenge_max', wordList.length);
+      loadHighScore();
+
       const resultBox = document.getElementById('result-box');
       const resultTitle = document.getElementById('result-title');
       const resultInfo = document.getElementById('result-info');
 
-      resultTitle.innerText = "🎉 認讀挑戰全滿貫！";
-      resultInfo.innerHTML = `📚 太棒了！你成功認讀完全部 <b>${currentIndex}</b> 個詞語！`;
+      resultTitle.innerText = "🎉 認讀大挑戰全滿貫！";
+      resultInfo.innerHTML = `📚 太棒了！你成功認讀完全部 <b>${count}</b> 個詞語！`;
       resultBox.style.display = 'block';
     }
+
+    loadHighScore();
   </script>
 </body>
 </html>
