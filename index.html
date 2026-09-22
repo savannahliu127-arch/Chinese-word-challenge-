@@ -112,6 +112,9 @@
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
 
+    // 💡 後台靜默放行門檻（相當於 100 分制下的 30 分，確保讀對才算過關）
+    const SILENT_PASS_SCORE = 30;
+
     // 889 個詞語庫
     const wordList = [
       "晴天", "雨天", "陰天", "大霧", "下雨", "打雷", "晴朗", "冰雹", "太陽", "下雪", "月亮", "星星", "彩虹", "閃電", "颱風", 
@@ -191,7 +194,7 @@
     let maxTimeoutTimer = null;
     let isEndingFrameSent = false;
 
-    // 🔊 簡短雙音階叮聲
+    // 🔊 雙音階歡慶聲效
     function playSuccessChime() {
       try {
         const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -219,6 +222,22 @@
       } catch(e) {}
     }
 
+    function playFailBuzz() {
+      try {
+        const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, ctx.currentTime);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      } catch(e) {}
+    }
+
     function updateCard() {
       if (currentIndex >= wordList.length) {
         endChallenge(true);
@@ -239,7 +258,6 @@
     }
 
     function startChallenge() {
-      // 💡 關鍵修復：點擊時解鎖 iPad AudioContext 麥克風休眠
       if (!audioContext) {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
@@ -313,7 +331,6 @@
         ws.send(JSON.stringify(params));
         startAudioRecording();
 
-        // 保底 2.5 秒無聲音自動切換
         maxTimeoutTimer = setTimeout(() => {
           finishSpeechAndSendEndFrame();
         }, 2500);
@@ -322,10 +339,35 @@
       ws.onmessage = (event) => {
         const res = JSON.parse(event.data);
         if (res.code === 0 && res.data && res.data.data) {
-          // 只要訊飛能解析出回應，即認定捕捉到有效讀音，直接過關！
-          handleSuccess();
+          // 解析訊飛返回的分數
+          const xmlStr = atob(res.data.data);
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
+          const totalScoreElem = xmlDoc.querySelector("read_word") || xmlDoc.querySelector("rec_paper");
+          
+          let score = 0;
+          if (totalScoreElem && totalScoreElem.getAttribute("total_score")) {
+            score = parseFloat(totalScoreElem.getAttribute("total_score"));
+          } else if (xmlDoc.documentElement && xmlDoc.documentElement.getAttribute("total_score")) {
+            score = parseFloat(xmlDoc.documentElement.getAttribute("total_score"));
+          }
+
+          // 💡 自動相容 5 分制與 100 分制：若得分 <= 5，自動乘以 20 換算成百分制
+          let normalizedScore = score;
+          if (score > 0 && score <= 5) {
+            normalizedScore = score * 20;
+          }
+
+          console.log(`訊飛評測【${currentWord}】原始得分：${score}，換算後：${normalizedScore}`);
+
+          // 💡 後台進行精準校驗：超過門檻才算過關！
+          if (normalizedScore >= SILENT_PASS_SCORE) {
+            handleSuccess();
+          } else {
+            handleFail(currentWord);
+          }
         } else if (res.code !== 0) {
-          console.error("訊飛提示:", res);
+          console.error("連線提示:", res);
         }
       };
 
@@ -441,14 +483,14 @@
       return window.btoa(binary);
     }
 
-    // 💡 純累計過關處理，不顯示分數
+    // 💡 認讀正確：累計 +1，播放叮聲並進入下一詞
     function handleSuccess() {
       stopAudioRecording();
       if (ws) ws.close();
 
       playSuccessChime();
       document.getElementById('flashcard').className = 'flashcard correct';
-      document.getElementById('status-text').innerText = `✨ 認讀成功！`;
+      document.getElementById('status-text').innerText = `✨ 認讀正確！`;
 
       currentIndex++;
       setTimeout(() => {
@@ -457,6 +499,27 @@
           startEvaluateCurrentWord();
         }
       }, 400);
+    }
+
+    // 💡 認讀錯誤：停在該詞，停止挑戰並結算成績
+    function handleFail(targetWord) {
+      stopAudioRecording();
+      if (ws) ws.close();
+
+      playFailBuzz();
+      document.getElementById('flashcard').className = 'flashcard wrong';
+      stopChallenge();
+
+      const resultBox = document.getElementById('result-box');
+      const resultTitle = document.getElementById('result-title');
+      const resultInfo = document.getElementById('result-info');
+
+      resultTitle.innerText = "🎯 挑戰結束";
+      resultInfo.innerHTML = `
+        認讀【<span style="color:#e74c3c">${targetWord}</span>】時未通過。<br><br>
+        📚 本次共成功累計認讀了 <b>${currentIndex}</b> 個詞語！
+      `;
+      resultBox.style.display = 'block';
     }
 
     function skipWord() {
@@ -475,8 +538,8 @@
       const resultTitle = document.getElementById('result-title');
       const resultInfo = document.getElementById('result-info');
 
-      resultTitle.innerText = "🎉 認讀挑戰完成！";
-      resultInfo.innerHTML = `📚 本次共成功累計認讀了 <b>${currentIndex}</b> 個詞語！`;
+      resultTitle.innerText = "🎉 認讀挑戰全滿貫！";
+      resultInfo.innerHTML = `📚 太棒了！你成功認讀完全部 <b>${currentIndex}</b> 個詞語！`;
       resultBox.style.display = 'block';
     }
   </script>
