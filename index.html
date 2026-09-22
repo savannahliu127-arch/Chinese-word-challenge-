@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰</title>
+  <title>900 詞語認讀大挑戰 (極速響應版)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -108,14 +108,12 @@
   </div>
 
   <script>
-    // ========================================================
-    // 🔑 訊飛憑證與配置
-    // ========================================================
+    // 🔑 訊飛憑證配置
     const APPID = "786de6ae";
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
     
-    // 放行門檻
+    // 放行分數門檻
     const MIN_ACCEPT_SCORE = 20; 
 
     // 889 個詞語庫
@@ -332,9 +330,10 @@
         ws.send(JSON.stringify(params));
         startAudioRecording();
 
+        // ⚡ 單字認讀保底時間縮短至 2.5 秒
         maxTimeoutTimer = setTimeout(() => {
           finishSpeechAndSendEndFrame();
-        }, 4000);
+        }, 2500);
       };
 
       ws.onmessage = (event) => {
@@ -368,10 +367,9 @@
 
     function finishSpeechAndSendEndFrame() {
       if (isEndingFrameSent) return;
-      isEndingFrameSent = true;
+      isEndingFrameSent = true; // ⚡ 立即封鎖後續音訊傳遞，避免 ret=7
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        // 💡 修正：語音評測數據欄位名稱應為 data，非 audio
         ws.send(JSON.stringify({
           business: { cmd: "auw", aus: 4 },
           data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", data: "" }
@@ -426,21 +424,24 @@
           }
           const rms = Math.sqrt(sum / resampledData.length);
 
-          if (rms > 0.02) {
+          // ⚡ 音量門檻降低為 0.015，更靈敏捉捕捉童音
+          if (rms > 0.015) {
             hasSpoken = true;
             silenceStartTime = null;
           } else if (hasSpoken) {
             if (!silenceStartTime) silenceStartTime = Date.now();
-            if (Date.now() - silenceStartTime > 700) {
+            // ⚡ 說完停頓 0.4 秒即自動送出結算，達成極速響應
+            if (Date.now() - silenceStartTime > 400) {
               finishSpeechAndSendEndFrame();
               return;
             }
           }
 
           const pcmData = convertTo16BitPCM(resampledData);
+          if (!pcmData || pcmData.byteLength === 0) return; // ⚡ 確保音訊非空，防護 ret=7
+
           const base64Data = arrayBufferToBase64(pcmData);
 
-          // 💡 修正：語音評測數據欄位名稱應為 data，非 audio
           ws.send(JSON.stringify({
             business: { cmd: "auw", aus: 2 },
             data: { status: 1, format: "audio/L16;rate=16000", encoding: "raw", data: base64Data }
@@ -495,7 +496,7 @@
             updateCard();
             startEvaluateCurrentWord();
           }
-        }, 700);
+        }, 500);
       } else {
         playFailBuzz();
         document.getElementById('flashcard').className = 'flashcard wrong';
