@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰</title>
+  <title>900 詞語認讀大挑戰 (訊飛靈敏修復版)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -109,14 +109,14 @@
 
   <script>
     // ========================================================
-    // 🔑 科大訊飛 3 串金鑰 (請在此處填入你的密鑰)
+    // 🔑 已經自動為你填入你提供的 3 串金鑰
     // ========================================================
     const APPID = "786de6ae";
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
     
-    // 開口即放行低門檻
-    const MIN_ACCEPT_SCORE = 25; 
+    // 開口即放行低門檻（20 分即可過關）
+    const MIN_ACCEPT_SCORE = 20; 
 
     // 889 個詞語庫
     const wordList = [
@@ -192,18 +192,15 @@
     let audioContext = null;
     let scriptProcessor = null;
 
-    // VAD 自動靜音偵測變數
     let hasSpoken = false;
     let silenceStartTime = null;
     let maxTimeoutTimer = null;
     let isEndingFrameSent = false;
 
-    // 🔊 使用 Web Audio API 原生合成歡慶音效（0 延遲，100% 響亮）
+    // 🔊 雙音階歡慶聲效
     function playSuccessChime() {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        
-        // 音符 1: E5 (659.25Hz)
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = 'sine';
@@ -215,7 +212,6 @@
         osc1.start(ctx.currentTime);
         osc1.stop(ctx.currentTime + 0.3);
 
-        // 音符 2: B5 (987.77Hz) 歡快高音叮
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = 'sine';
@@ -265,10 +261,6 @@
       if (isChallenging) {
         stopChallenge();
       } else {
-        if (APPID === "YOUR_APPID") {
-          alert("請先在代碼中填入您的訊飛 APPID、APIKey、APISecret！");
-          return;
-        }
         startChallenge();
       }
     }
@@ -296,6 +288,7 @@
       document.getElementById('status-text').innerText = '挑戰暫停中';
     }
 
+    // 💡 修正 URL 轉義問題，避免 iPad 斷開
     function getWebSocketUrl() {
       const host = "ise-api.xfyun.cn";
       const date = new Date().toUTCString();
@@ -304,7 +297,7 @@
       const signatureSha = CryptoJS.HmacSHA256(signatureOrigin, API_SECRET);
       const signature = CryptoJS.enc.Base64.stringify(signatureSha);
       const authorizationOrigin = `api_key="${API_KEY}", algorithm="hmac-sha256", headers="host date request-line", signature="${signature}"`;
-      const authorization = btoa(authorizationOrigin);
+      const authorization = encodeURIComponent(btoa(authorizationOrigin));
       return `wss://${host}/v2/open-ise?authorization=${authorization}&date=${encodeURIComponent(date)}&host=${host}`;
     }
 
@@ -341,7 +334,7 @@
         ws.send(JSON.stringify(params));
         startAudioRecording();
 
-        // 💡 保底倒數計時：單字錄音超過 4 秒強制通知訊飛結算
+        // 4秒無響應自動發送結算
         maxTimeoutTimer = setTimeout(() => {
           finishSpeechAndSendEndFrame();
         }, 4000);
@@ -364,12 +357,15 @@
           }
 
           handleResult(score, currentWord);
+        } else if (res.code !== 0) {
+          console.error("訊飛返回錯誤碼:", res);
+          document.getElementById('status-text').innerText = `⚠️ 訊飛提示: ${res.message || "評測異常"}`;
         }
       };
 
       ws.onerror = (err) => {
-        console.error("訊飛連接錯誤:", err);
-        document.getElementById('status-text').innerText = "⚠️ 連接訊飛服務失敗，請檢查 API Key";
+        console.error("訊飛連線錯誤:", err);
+        document.getElementById('status-text').innerText = "⚠️ 訊飛伺服器連線失敗，請稍後重試";
       };
     }
 
@@ -378,7 +374,6 @@
       isEndingFrameSent = true;
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        // 發送訊飛錄音結束標誌 status: 2
         ws.send(JSON.stringify({
           business: { cmd: "auw", aus: 4 },
           data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", audio: "" }
@@ -388,10 +383,37 @@
       stopAudioRecording();
     }
 
+    // 💡 降採樣演算法：將 iPad 的 48000Hz 重採樣降為訊飛聽得懂的 16000Hz
+    function downsampleBuffer(buffer, sampleRate, outSampleRate = 16000) {
+      if (outSampleRate >= sampleRate) return buffer;
+      const sampleRateRatio = sampleRate / outSampleRate;
+      const newLength = Math.round(buffer.length / sampleRateRatio);
+      const result = new Float32Array(newLength);
+      let offsetResult = 0;
+      let offsetBuffer = 0;
+      while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+        let accum = 0, count = 0;
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+          accum += buffer[i];
+          count++;
+        }
+        result[offsetResult] = count > 0 ? accum / count : 0;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+      }
+      return result;
+    }
+
     function startAudioRecording() {
       navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
         mediaStream = stream;
-        audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+
         const source = audioContext.createMediaStreamSource(stream);
         scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -399,26 +421,27 @@
           if (!isChallenging || !ws || ws.readyState !== WebSocket.OPEN || isEndingFrameSent) return;
           const inputData = e.inputBuffer.getChannelData(0);
 
-          // 計算目前音量 RMS (用於自動判斷停頓)
-          let sum = 0;
-          for (let i = 0; i < inputData.length; i++) {
-            sum += inputData[i] * inputData[i];
-          }
-          const rms = Math.sqrt(sum / inputData.length);
+          // 重採樣降頻為 16000Hz
+          const resampledData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
-          if (rms > 0.03) {
+          let sum = 0;
+          for (let i = 0; i < resampledData.length; i++) {
+            sum += resampledData[i] * resampledData[i];
+          }
+          const rms = Math.sqrt(sum / resampledData.length);
+
+          if (rms > 0.02) {
             hasSpoken = true;
-            silenceStartTime = null; // 重新說話，清空靜音時間
+            silenceStartTime = null;
           } else if (hasSpoken) {
             if (!silenceStartTime) silenceStartTime = Date.now();
-            // 💡 停頓 0.8 秒後自動停止並結算！
-            if (Date.now() - silenceStartTime > 800) {
+            if (Date.now() - silenceStartTime > 700) {
               finishSpeechAndSendEndFrame();
               return;
             }
           }
 
-          const pcmData = convertTo16BitPCM(inputData);
+          const pcmData = convertTo16BitPCM(resampledData);
           const base64Data = arrayBufferToBase64(pcmData);
 
           ws.send(JSON.stringify({
@@ -430,7 +453,7 @@
         source.connect(scriptProcessor);
         scriptProcessor.connect(audioContext.destination);
       }).catch(err => {
-        alert("無法獲取麥克風權限: " + err);
+        alert("無法獲取麥克風權限，請確認已點擊允許: " + err);
       });
     }
 
@@ -465,9 +488,7 @@
       console.log(`訊飛評測【${word}】得分：`, score);
 
       if (score >= MIN_ACCEPT_SCORE) {
-        // ✨ 播放叮叮歡慶音效
         playSuccessChime();
-        
         document.getElementById('flashcard').className = 'flashcard correct';
         document.getElementById('status-text').innerText = `✨ 認讀成功！得分：${Math.round(score)} 分`;
 
