@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (訊飛參數修正版)</title>
+  <title>900 詞語認讀大挑戰</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -109,13 +109,13 @@
 
   <script>
     // ========================================================
-    // 🔑 已經為你填入你提供的 3 串金鑰
+    // 🔑 訊飛憑證與配置
     // ========================================================
     const APPID = "786de6ae";
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
     
-    // 開口即放行低門檻（20 分即可過關）
+    // 放行門檻
     const MIN_ACCEPT_SCORE = 20; 
 
     // 889 個詞語庫
@@ -315,7 +315,6 @@
       ws = new WebSocket(url);
 
       ws.onopen = () => {
-        // 💡 修正了 tte 格式並刪除了多餘欄位，解決了 param validate error
         const params = {
           common: { app_id: APPID },
           business: {
@@ -333,7 +332,6 @@
         ws.send(JSON.stringify(params));
         startAudioRecording();
 
-        // 4秒無響應自動發送結算
         maxTimeoutTimer = setTimeout(() => {
           finishSpeechAndSendEndFrame();
         }, 4000);
