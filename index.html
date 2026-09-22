@@ -112,8 +112,8 @@
     const API_KEY = "257eca19b10379c91888b8453c93b994";
     const API_SECRET = "MTNjYTEyZGE3ZTE1NzZiMDA4OTE5YjE4";
 
-    // 💡 後台靜默放行門檻（相當於 100 分制下的 30 分，確保讀對才算過關）
-    const SILENT_PASS_SCORE = 30;
+    // 放行分數門檻（百分制 25 分以上算讀對）
+    const SILENT_PASS_SCORE = 25;
 
     // 889 個詞語庫
     const wordList = [
@@ -192,9 +192,10 @@
     let hasSpoken = false;
     let silenceStartTime = null;
     let maxTimeoutTimer = null;
+    let analysisTimeout = null;
     let isEndingFrameSent = false;
 
-    // 🔊 雙音階歡慶聲效
+    // 🔊 雙音階歡慶音效
     function playSuccessChime() {
       try {
         const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -279,6 +280,7 @@
     function stopChallenge() {
       isChallenging = false;
       clearTimeout(maxTimeoutTimer);
+      clearTimeout(analysisTimeout);
       stopAudioRecording();
       if (ws) ws.close();
       document.getElementById('start-btn').innerText = '重新開始';
@@ -306,6 +308,7 @@
       silenceStartTime = null;
       isEndingFrameSent = false;
       clearTimeout(maxTimeoutTimer);
+      clearTimeout(analysisTimeout);
 
       const currentWord = wordList[currentIndex].replace(/[…\.]/g, '');
       document.getElementById('status-text').innerText = `🎤 請認讀【${currentWord}】...`;
@@ -337,42 +340,68 @@
       };
 
       ws.onmessage = (event) => {
-        const res = JSON.parse(event.data);
-        if (res.code === 0 && res.data && res.data.data) {
-          // 解析訊飛返回的分數
-          const xmlStr = atob(res.data.data);
-          const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
-          const totalScoreElem = xmlDoc.querySelector("read_word") || xmlDoc.querySelector("rec_paper");
-          
-          let score = 0;
-          if (totalScoreElem && totalScoreElem.getAttribute("total_score")) {
-            score = parseFloat(totalScoreElem.getAttribute("total_score"));
-          } else if (xmlDoc.documentElement && xmlDoc.documentElement.getAttribute("total_score")) {
-            score = parseFloat(xmlDoc.documentElement.getAttribute("total_score"));
-          }
+        try {
+          const res = JSON.parse(event.data);
 
-          // 💡 自動相容 5 分制與 100 分制：若得分 <= 5，自動乘以 20 換算成百分制
-          let normalizedScore = score;
-          if (score > 0 && score <= 5) {
-            normalizedScore = score * 20;
-          }
-
-          console.log(`訊飛評測【${currentWord}】原始得分：${score}，換算後：${normalizedScore}`);
-
-          // 💡 後台進行精準校驗：超過門檻才算過關！
-          if (normalizedScore >= SILENT_PASS_SCORE) {
-            handleSuccess();
-          } else {
+          // 訊飛伺服器返回異常代碼，自動停止結算（防死鎖）
+          if (res.code !== 0) {
+            console.warn("訊飛返回狀態碼:", res);
+            clearTimeout(analysisTimeout);
             handleFail(currentWord);
+            return;
           }
-        } else if (res.code !== 0) {
-          console.error("連線提示:", res);
+
+          if (res.data && res.data.data) {
+            clearTimeout(analysisTimeout);
+
+            let xmlStr = "";
+            try {
+              xmlStr = atob(res.data.data);
+            } catch (e) {
+              console.error("Base64 解碼失敗:", e);
+              handleFail(currentWord);
+              return;
+            }
+
+            let score = 0;
+            try {
+              const parser = new DOMParser();
+              const xmlDoc = parser.parseFromString(xmlStr, "text/xml");
+              const totalScoreElem = xmlDoc.querySelector("read_word") || xmlDoc.querySelector("rec_paper");
+              
+              if (totalScoreElem && totalScoreElem.getAttribute("total_score")) {
+                score = parseFloat(totalScoreElem.getAttribute("total_score"));
+              } else if (xmlDoc.documentElement && xmlDoc.documentElement.getAttribute("total_score")) {
+                score = parseFloat(xmlDoc.documentElement.getAttribute("total_score"));
+              }
+            } catch(e) {
+              console.error("XML 解析失敗:", e);
+            }
+
+            let normalizedScore = score;
+            if (score > 0 && score <= 5) {
+              normalizedScore = score * 20;
+            }
+
+            console.log(`訊飛評測【${currentWord}】原始得分：${score}，換算後：${normalizedScore}`);
+
+            if (normalizedScore >= SILENT_PASS_SCORE) {
+              handleSuccess();
+            } else {
+              handleFail(currentWord);
+            }
+          }
+        } catch (err) {
+          console.error("onmessage 處理異常:", err);
+          clearTimeout(analysisTimeout);
+          handleFail(currentWord);
         }
       };
 
       ws.onerror = (err) => {
         console.error("連線錯誤:", err);
+        clearTimeout(analysisTimeout);
+        handleFail(currentWord);
       };
     }
 
@@ -380,12 +409,22 @@
       if (isEndingFrameSent) return;
       isEndingFrameSent = true;
 
+      const currentWord = wordList[currentIndex].replace(/[…\.]/g, '');
+
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           business: { cmd: "auw", aus: 4 },
           data: { status: 2, format: "audio/L16;rate=16000", encoding: "raw", data: "" }
         }));
         document.getElementById('status-text').innerText = `⏳ 分析中...`;
+
+        // 💡 3 秒防卡死保底倒數：若訊飛無回應，自動結算結尾！
+        analysisTimeout = setTimeout(() => {
+          console.warn("訊飛分析超時，自動結算");
+          handleFail(currentWord);
+        }, 3000);
+      } else {
+        handleFail(currentWord);
       }
       stopAudioRecording();
     }
@@ -483,8 +522,8 @@
       return window.btoa(binary);
     }
 
-    // 💡 認讀正確：累計 +1，播放叮聲並進入下一詞
     function handleSuccess() {
+      clearTimeout(analysisTimeout);
       stopAudioRecording();
       if (ws) ws.close();
 
@@ -501,8 +540,8 @@
       }, 400);
     }
 
-    // 💡 認讀錯誤：停在該詞，停止挑戰並結算成績
     function handleFail(targetWord) {
+      clearTimeout(analysisTimeout);
       stopAudioRecording();
       if (ws) ws.close();
 
@@ -525,6 +564,7 @@
     function skipWord() {
       if (!isChallenging) return;
       clearTimeout(maxTimeoutTimer);
+      clearTimeout(analysisTimeout);
       stopAudioRecording();
       if (ws) ws.close();
       currentIndex++;
