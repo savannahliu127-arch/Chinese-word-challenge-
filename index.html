@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (訊飛靈敏修復版)</title>
+  <title>900 詞語認讀大挑戰 (訊飛參數修正版)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -109,7 +109,7 @@
 
   <script>
     // ========================================================
-    // 🔑 已經自動為你填入你提供的 3 串金鑰
+    // 🔑 已經為你填入你提供的 3 串金鑰
     // ========================================================
     const APPID = "786de6ae";
     const API_KEY = "257eca19b10379c91888b8453c93b994";
@@ -288,7 +288,6 @@
       document.getElementById('status-text').innerText = '挑戰暫停中';
     }
 
-    // 💡 修正 URL 轉義問題，避免 iPad 斷開
     function getWebSocketUrl() {
       const host = "ise-api.xfyun.cn";
       const date = new Date().toUTCString();
@@ -316,6 +315,7 @@
       ws = new WebSocket(url);
 
       ws.onopen = () => {
+        // 💡 修正了 tte 格式並刪除了多餘欄位，解決了 param validate error
         const params = {
           common: { app_id: APPID },
           business: {
@@ -324,10 +324,9 @@
             ent: "cn_vip",
             cmd: "ssb",
             text: `\uFEFF[ise]\nlanguage=zh_cn\ncategory=read_word\n${currentWord}`,
-            tte: "utf8",
+            tte: "utf-8",
             auf: "audio/L16;rate=16000",
-            aus: 1,
-            awa: "number"
+            aus: 1
           },
           data: { status: 0 }
         };
@@ -383,7 +382,6 @@
       stopAudioRecording();
     }
 
-    // 💡 降採樣演算法：將 iPad 的 48000Hz 重採樣降為訊飛聽得懂的 16000Hz
     function downsampleBuffer(buffer, sampleRate, outSampleRate = 16000) {
       if (outSampleRate >= sampleRate) return buffer;
       const sampleRateRatio = sampleRate / outSampleRate;
@@ -421,7 +419,6 @@
           if (!isChallenging || !ws || ws.readyState !== WebSocket.OPEN || isEndingFrameSent) return;
           const inputData = e.inputBuffer.getChannelData(0);
 
-          // 重採樣降頻為 16000Hz
           const resampledData = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
 
           let sum = 0;
