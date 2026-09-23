@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (隨機/順序雙模式版)</title>
+  <title>900 詞語認讀大挑戰 (可點擊切換模式版)</title>
   <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -48,15 +48,25 @@
       font-size: 14px;
       margin-left: 6px;
     }
+    /* 💡 可點擊切換的模式按鈕樣式 */
     .mode-badge {
-      background: #e0e0e0;
-      color: #333333;
+      background: #e8f4f8;
+      color: #2980b9;
       font-weight: bold;
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 13px;
+      padding: 6px 16px;
+      border-radius: 16px;
+      font-size: 14px;
       margin-bottom: 12px;
       display: inline-block;
+      cursor: pointer;
+      border: 2px solid #3498db;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+    }
+    .mode-badge:hover {
+      background: #3498db;
+      color: #ffffff;
+      transform: scale(1.05);
     }
     .progress-bar { font-size: 16px; color: #666; margin-bottom: 15px; }
     .flashcard {
@@ -156,7 +166,10 @@
       <div class="high-score-badge" id="high-score-display">🏆 最高紀錄：0</div>
     </div>
     <div>
-      <div class="mode-badge" id="mode-display">模式：➡️ 順序認讀</div>
+      <!-- 💡 可點擊切換模式的按鈕 -->
+      <div class="mode-badge" id="mode-display" onclick="promptNewModeSelect()" title="點擊即可切換模式">
+        ⚙️ 模式：➡️ 順序認讀 (點擊切換)
+      </div>
     </div>
     <div class="progress-bar" id="progress">準備開始認讀大挑戰</div>
 
@@ -222,7 +235,7 @@
 
   <script>
     const tradChars = "陰陽雲霧颱風涼濕傾佈時週節國聖誕復萬獨廣廳驗園戲館樂醫鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦襪褲襯錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫對認識變選擇視頻電腦顯紙筆張個隻塊歲幾麼還與輕長遠難溫壞圓灣寬滿興奮氣憤訝尷無緊處區門奧華軍銀綠藍黃懶頑強嚇靜悶劃閃熱後擺隨總結實聯絡續繼斷換轉機碼質數據設備資訊報確證發現獲勝敗頂頸蓋貓鴨馬鳥魚獅鯨烏鯊鵝鱷倉蜴蒼賣掃賽飯夢潛聞題課騎單彈鋼運遊籃欖購淚軟簡骯麗潑壯惡鮮餅腸壽檸薩櫻獼異鉛膠壺貼冊獎顏達傘鐘廁簾錢潔燈調鏡應項鍊環飾紅淺噴飄騰傷羨積覺顆";
-    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾袜裤衬表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进过来产亲带帮对认识变选择视频电脑显纸笔张个只块岁几么还与轻长远难温坏圆弯宽满兴奋气愤讶尴无紧处区门奥华军银绿蓝黄懒顽强吓静闷划闪热后摆随总结实联络续继断换转机码质数据设备资讯报确证发现获胜败顶颈盖猫鸭马鸟鱼狮鲸乌鲨鹅鳄仓蜥苍卖扫赛饭梦潜闻题课骑单弹钢运游篮榄购泪软简肮丽泼壮恶鲜饼肠寿柠萨樱猕异铅胶壶贴册奖颜达伞钟厕帘钱洁灯调镜应项链环饰红浅喷飘腾伤羡积觉颗";
+    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾袜裤衬表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进过来产亲带帮对认识变选择视频电脑显纸笔张个只块岁几么还与轻长远难温坏圆湾宽满兴奋气愤讶尴尬无奈紧张处区门奥华军银绿蓝黄懒顽强吓静闷划闪热后摆随总结实联络续继断换转机码质数据设备资讯报确证发现获胜败顶颈盖猫鸭马鸟鱼狮鲸乌鲨鹅鳄仓蜥苍卖扫赛饭梦潜闻题课骑单弹钢运游篮榄购泪软简肮丽泼壮恶鲜饼肠寿柠萨樱猕异铅胶壶贴册奖颜达伞钟厕帘钱洁灯调镜应项链环饰红浅喷飘腾伤羡积觉颗";
 
     function toSimplified(str) {
       if (!str) return '';
@@ -301,7 +314,7 @@
     ];
 
     let activeWordList = [...rawWordList];
-    let currentMode = "sequential"; // 'sequential' or 'random'
+    let currentMode = "sequential";
     let currentIndex = 0;
     let isChallenging = false;
     let recognition = null;
@@ -309,7 +322,6 @@
     
     let sessionWrongWords = new Set();
 
-    // Fisher-Yates 洗牌演算法
     function shuffleArray(array) {
       const arr = [...array];
       for (let i = arr.length - 1; i > 0; i--) {
@@ -382,7 +394,7 @@
       document.getElementById('progress').innerText = `第 ${currentIndex + 1} / ${activeWordList.length} 個詞`;
       document.getElementById('word-display').innerText = activeWordList[currentIndex];
       document.getElementById('count-display').innerText = `📚 本次認讀：${currentIndex} 個詞`;
-      document.getElementById('mode-display').innerText = currentMode === 'random' ? "模式：🔀 隨機大亂鬥" : "模式：➡️ 順序認讀";
+      document.getElementById('mode-display').innerText = currentMode === 'random' ? "⚙️ 模式：🔀 隨機大亂鬥 (點擊切換)" : "⚙️ 模式：➡️ 順序認讀 (點擊切換)";
       document.getElementById('flashcard').className = 'flashcard';
       saveProgress();
     }
@@ -402,7 +414,14 @@
       }
     }
 
+    // 💡 點擊頂部模式標籤或新開局時彈出模式選擇彈窗
     function promptNewModeSelect() {
+      if (isChallenging) {
+        if (!confirm("切換模式將會暫停當前挑戰，確定要切換模式嗎？")) {
+          return;
+        }
+        stopChallenge();
+      }
       document.getElementById('save-modal').style.display = 'none';
       document.getElementById('fail-modal').style.display = 'none';
       document.getElementById('mode-select-modal').style.display = 'flex';
@@ -717,14 +736,13 @@
       resultBox.style.display = 'block';
     }
 
-    // 初始化載入最高紀錄與檢查歷史存檔狀態
     loadHighScore();
     const savedListStr = localStorage.getItem('vocab_saved_list');
     if (savedListStr) {
       try { activeWordList = JSON.parse(savedListStr); } catch(e) {}
     }
     currentMode = localStorage.getItem('vocab_saved_mode') || 'sequential';
-    document.getElementById('mode-display').innerText = currentMode === 'random' ? "模式：🔀 隨機大亂鬥" : "模式：➡️ 順序認讀";
+    document.getElementById('mode-display').innerText = currentMode === 'random' ? "⚙️ 模式：🔀 隨機大亂鬥 (點擊切換)" : "⚙️ 模式：➡️ 順序認讀 (點擊切換)";
   </script>
 </body>
 </html>
