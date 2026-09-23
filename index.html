@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (原生極速版)</title>
+  <title>900 詞語認讀大挑戰 (繁簡互通版)</title>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
     body {
@@ -120,7 +120,7 @@
   </div>
 
   <script>
-    // 💡 常用 Siri 語音辨識誤判同音詞字典（可自由補充）
+    // 💡 常用 Siri 語音辨識誤判同音詞字典
     const homophoneMap = {
       "打雷": ["打理", "大理", "咖哩", "打擂", "答雷", "大雷"],
       "陰天": ["今天", "一天", "英天", "應天"],
@@ -136,7 +136,7 @@
       "雲霧": ["雲物", "勻霧"],
       "刮風": ["掛風", "瓜風"],
       "炎熱的": ["炎熱", "鹽熱"],
-      "今天": "陰天",
+      "今天": ["陰天", "一天"],
       "昨天": ["做天", "坐天"],
       "明天": ["名天", "銘天"],
       "小息": ["小膝", "小西", "休息"],
@@ -166,6 +166,24 @@
       "公園": ["公員", "工園"],
       "廁所": ["側所", "冊所"]
     };
+
+    // 💡 繁簡體對照轉換表（實現繁簡互通）
+    const tradChars = "陰陽雲霧颱風涼濕傾佈時候週節國聖誕復萬獨廣廳驗園戲館樂醫警鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦蟹襪褲襯衫裙錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫助對認識變選擇視頻電腦顯示號紙筆尺張個隻條塊歲幾麼還與或輕重長短遠近難溫壞圓彎寬窄暗滿興奮氣憤怒驚訝尷尬無奈緊張處區灣臺門奧華軍銀綠藍黃懶頑活溫強弱嚇靜悶顯劃話";
+    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医警铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾蟹袜裤衬衫裙表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进来产亲带帮助对认识变选择视频电脑显示号纸笔尺张个只条块岁几么还与或轻重长短远近难温坏圆弯宽窄暗满兴奋气愤怒惊讶尴尬无奈紧张处区湾台门奥华军银绿蓝黄懒顽活温强弱吓静闷显划话";
+
+    function toSimplified(str) {
+      if (!str) return '';
+      let result = '';
+      for (let char of str) {
+        const idx = tradChars.indexOf(char);
+        if (idx !== -1) {
+          result += simpChars[idx];
+        } else {
+          result += char;
+        }
+      }
+      return result;
+    }
 
     // 889 個詞語庫
     const wordList = [
@@ -348,7 +366,7 @@
 
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognition = new SpeechRecognition();
-      recognition.lang = 'zh-CN'; // 設定普通話辨識
+      recognition.lang = 'zh-CN';
       recognition.continuous = false;
       recognition.interimResults = false;
 
@@ -370,23 +388,19 @@
       recognition.onerror = (event) => {
         console.warn("語音辨識提示:", event.error);
         if (event.error === 'no-speech' && isChallenging) {
-          // 若沒聽清楚，重啟辨識繼續聽
           restartListening();
         }
       };
 
       recognition.onend = () => {
         if (isChallenging) {
-          // 防止辨識中斷，自動保持收聽 state
           restartListening();
         }
       };
 
       try {
         recognition.start();
-      } catch(e) {
-        console.log("Recognition start Exception:", e);
-      }
+      } catch(e) {}
     }
 
     function restartListening() {
@@ -396,23 +410,28 @@
       } catch(e) {}
     }
 
-    // 💡 智能匹配演算法：包含比對 + 同音詞字典比對
+    // 💡 智能繁簡體 + 同音匹配演算法
     function checkMatch(heard, target) {
       if (!heard || !target) return false;
       
-      // 1. 完全或子字串包含比對
-      if (heard.includes(target) || target.includes(heard)) return true;
+      // 統一轉為簡體進行正規化比對
+      const simpHeard = toSimplified(heard);
+      const simpTarget = toSimplified(target);
 
-      // 2. 清理標點符號後比對
-      const cleanHeard = heard.replace(/[^\u4e00-\u9fa5]/g, '');
-      const cleanTarget = target.replace(/[^\u4e00-\u9fa5]/g, '');
+      // 1. 完全包含比對 (例如: "阴天".includes("阴天"))
+      if (simpHeard.includes(simpTarget) || simpTarget.includes(simpHeard)) return true;
+
+      // 2. 清除標點符號後比對
+      const cleanHeard = simpHeard.replace(/[^\u4e00-\u9fa5]/g, '');
+      const cleanTarget = simpTarget.replace(/[^\u4e00-\u9fa5]/g, '');
       if (cleanHeard.includes(cleanTarget) || cleanTarget.includes(cleanHeard)) return true;
 
-      // 3. 同音詞字典相容性比對
+      // 3. 同音詞字典相容性比對 (同音字詞庫亦統一轉簡體比對)
       if (homophoneMap[target]) {
         const aliases = Array.isArray(homophoneMap[target]) ? homophoneMap[target] : [homophoneMap[target]];
         for (let alias of aliases) {
-          if (cleanHeard.includes(alias) || alias.includes(cleanHeard)) {
+          const simpAlias = toSimplified(alias);
+          if (cleanHeard.includes(simpAlias) || simpAlias.includes(cleanHeard)) {
             return true;
           }
         }
