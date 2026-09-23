@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (拼音學習版)</title>
+  <title>900 詞語認讀大挑戰 (全詞庫繁簡通吃版)</title>
   <!-- 💡 引入拼音解析庫，自動生成帶聲調標準拼音 -->
   <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js"></script>
   <style>
@@ -95,7 +95,7 @@
     .result-title { font-size: 26px; color: #2980b9; font-weight: bold; margin-bottom: 10px; }
     .result-info { font-size: 18px; color: #2c3e50; line-height: 1.6; }
 
-    /* 💡 錯詞拼音提示卡樣式 */
+    /* 錯詞拼音學習卡 */
     .learn-card {
       background: #fef9e7;
       border: 2px dashed #f39c12;
@@ -103,18 +103,8 @@
       padding: 15px;
       margin: 15px 0;
     }
-    .learn-word {
-      font-size: 32px;
-      font-weight: bold;
-      color: #e74c3c;
-    }
-    .learn-pinyin {
-      font-size: 24px;
-      font-weight: bold;
-      color: #d35400;
-      margin-top: 4px;
-      letter-spacing: 1px;
-    }
+    .learn-word { font-size: 32px; font-weight: bold; color: #e74c3c; }
+    .learn-pinyin { font-size: 24px; font-weight: bold; color: #d35400; margin-top: 4px; letter-spacing: 1px; }
   </style>
 </head>
 <body>
@@ -143,9 +133,9 @@
   </div>
 
   <script>
-    // 💡 繁簡體轉換表
-    const tradChars = "陰陽雲霧颱風涼濕傾佈時候週節國聖誕復萬獨廣廳驗園戲館樂醫警鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦蟹襪褲襯衫裙錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫助對認識變選擇視頻電腦顯示號紙筆尺張個隻條塊歲幾麼還與或輕重長短遠近難溫壞圓彎寬窄暗滿興奮氣憤怒驚訝尷尬無奈緊張處區灣臺門奧華軍銀綠藍黃懶頑活溫強弱嚇靜悶顯劃話";
-    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医警铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾蟹袜裤衬衫裙表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进来产亲带帮助对认识变选择视频电脑显示号纸笔尺张个只条块岁几麼还与或轻重长短远近难温坏圆弯宽窄暗满兴奋气愤怒惊讶尴尬无奈紧张处区湾台门奥华军银绿蓝黄懒顽活温强弱吓静闷显划话";
+    // 💡 覆蓋 889 詞庫中所有 282 個繁簡漢字對照表（確保 100% 繁簡完全互通）
+    const tradChars = "陰陽雲霧颱風涼濕傾佈時週節國聖誕復萬獨廣廳驗園戲館樂醫鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦襪褲襯錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫對認識變選擇視頻電腦顯紙筆張個隻塊歲幾麼還與輕長遠難溫壞圓灣寬滿興奮氣憤訝尷無緊處區門奧華軍銀綠藍黃懶頑強嚇靜悶劃閃熱後擺隨總結實聯絡續繼斷換轉機碼質數據設備資訊報確證發現獲勝敗頂頸蓋貓鴨馬鳥魚獅鯨烏鯊鵝鱷倉蜴蒼賣掃賽飯夢潛聞題課騎單彈鋼運遊籃欖購淚軟簡骯麗潑壯惡鮮餅腸壽檸薩櫻獼異鉛膠壺貼冊獎顏達傘鐘廁簾錢潔燈調鏡應項鍊環飾紅淺噴飄騰傷羨積覺顆";
+    const simpChars = "阴阳云雾台风凉湿倾布时周节国圣诞复万独广厅验园戏馆乐医铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾袜裤衬表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进过来产亲带帮对认识变选择视频电脑显纸笔张个只块岁几么还与轻长远难温坏圆湾宽满兴奋气愤讶尴无紧处区门奥华军银绿蓝黄懒顽强吓静闷划闪热后摆随总结实联络续继断换转机码质数据设备资讯报确证发现获胜败顶颈盖猫鸭马鸟鱼狮鲸乌鲨鹅鳄仓蜥苍卖扫赛饭梦潜闻题课骑单弹钢运游篮榄购泪软简肮丽泼壮恶鲜饼肠寿柠萨樱猕异铅胶壶贴册奖颜达伞钟厕帘钱洁灯调镜应项链环饰红浅喷飘腾伤羡积觉颗";
 
     function toSimplified(str) {
       if (!str) return '';
@@ -382,7 +372,7 @@
       } catch(e) {}
     }
 
-    // 💡 獲取帶聲調的標準漢語拼音（供錯詞學習卡使用）
+    // 💡 獲取帶聲調的標準漢語拼音
     function getStandardPinyin(word) {
       if (window.pinyinPro) {
         try {
@@ -392,7 +382,7 @@
       return '';
     }
 
-    // 💡 提取文字的發音模糊拼音（自動模糊常見混淆韻母/聲母）
+    // 💡 提取文字發音的模糊拼音
     function getFuzzyPinyin(str) {
       if (!window.pinyinPro || !str) return '';
       try {
@@ -413,7 +403,7 @@
       }
     }
 
-    // 💡 編輯距離演算法 (Levenshtein Distance)
+    // 💡 編輯距離演算法
     function levenshteinDistance(a, b) {
       if (!a || !b) return (a || b).length;
       const matrix = [];
@@ -436,19 +426,24 @@
       return matrix[b.length][a.length];
     }
 
-    // 💡 智能匹配演算法：簡繁互通 + 拼音相似度 + 包含比對
+    // 💡 智能匹配演算法：100% 精準繁簡通吃 + 拼音相似度 + 包含比對
     function checkMatch(heard, target) {
       if (!heard || !target) return false;
       
+      // 1. 原字（繁體）比對
+      if (heard.includes(target) || target.includes(heard)) return true;
+
+      // 2. 簡體化比對（282 全字庫轉換）
       const simpHeard = toSimplified(heard);
       const simpTarget = toSimplified(target);
-
       if (simpHeard.includes(simpTarget) || simpTarget.includes(simpHeard)) return true;
 
+      // 3. 清理標點符號後比對
       const cleanHeard = simpHeard.replace(/[^\u4e00-\u9fa5]/g, '');
       const cleanTarget = simpTarget.replace(/[^\u4e00-\u9fa5]/g, '');
       if (cleanHeard.includes(cleanTarget) || cleanTarget.includes(cleanHeard)) return true;
 
+      // 4. 拼音相似度比對（Levenshtein distance >= 60%）
       const pyHeard = getFuzzyPinyin(cleanHeard);
       const pyTarget = getFuzzyPinyin(cleanTarget);
 
@@ -486,7 +481,6 @@
       }, 300);
     }
 
-    // 💡 讀錯時觸發：獲取該詞標準拼音並顯示在學習卡上
     function handleFail(targetWord, heardText) {
       playFailBuzz();
       document.getElementById('flashcard').className = 'flashcard wrong';
@@ -503,7 +497,6 @@
 
       stopChallenge();
 
-      // 💡 自動生成帶聲調的標準漢語拼音
       const targetPinyin = getStandardPinyin(targetWord);
 
       const resultBox = document.getElementById('result-box');
