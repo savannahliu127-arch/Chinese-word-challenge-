@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (繁簡互通版)</title>
+  <title>900 詞語認讀大挑戰 (拼音學習版)</title>
+  <!-- 💡 引入拼音解析庫，自動生成帶聲調標準拼音 -->
+  <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
     body {
@@ -91,7 +93,28 @@
       border: 2px solid #3498db;
     }
     .result-title { font-size: 26px; color: #2980b9; font-weight: bold; margin-bottom: 10px; }
-    .result-info { font-size: 20px; color: #2c3e50; line-height: 1.6; }
+    .result-info { font-size: 18px; color: #2c3e50; line-height: 1.6; }
+
+    /* 💡 錯詞拼音提示卡樣式 */
+    .learn-card {
+      background: #fef9e7;
+      border: 2px dashed #f39c12;
+      border-radius: 16px;
+      padding: 15px;
+      margin: 15px 0;
+    }
+    .learn-word {
+      font-size: 32px;
+      font-weight: bold;
+      color: #e74c3c;
+    }
+    .learn-pinyin {
+      font-size: 24px;
+      font-weight: bold;
+      color: #d35400;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
   </style>
 </head>
 <body>
@@ -120,67 +143,16 @@
   </div>
 
   <script>
-    // 💡 常用 Siri 語音辨識誤判同音詞字典
-    const homophoneMap = {
-      "打雷": ["打理", "大理", "咖哩", "打擂", "答雷", "大雷"],
-      "陰天": ["今天", "一天", "英天", "應天"],
-      "晴天": ["請天", "清天", "青天", "擎天"],
-      "下雨": ["夏雨", "下與", "下語"],
-      "太陽": ["太洋", "大陽"],
-      "月亮": ["越亮", "嶽亮"],
-      "彩虹": ["採紅", "彩紅"],
-      "閃電": ["刪電", "山電"],
-      "颱風": ["台風", "抬風"],
-      "涼快的": ["涼快", "涼快得"],
-      "寒冷的": ["寒冷", "韓冷"],
-      "雲霧": ["雲物", "勻霧"],
-      "刮風": ["掛風", "瓜風"],
-      "炎熱的": ["炎熱", "鹽熱"],
-      "今天": ["陰天", "一天"],
-      "昨天": ["做天", "坐天"],
-      "明天": ["名天", "銘天"],
-      "小息": ["小膝", "小西", "休息"],
-      "天天": ["甜甜", "田田"],
-      "黃昏": ["黃婚", "皇昏"],
-      "早上": ["藻上", "找上"],
-      "中午": ["中五", "忠午"],
-      "下午": ["下五"],
-      "晚上": ["晚雙"],
-      "以前": ["依前", "移前"],
-      "從前": ["重前", "崇前"],
-      "以後": ["依後", "移後"],
-      "現在": ["現再", "限在"],
-      "去年": ["趣年"],
-      "今年": ["金年", "津年"],
-      "週末": ["週末", "週木"],
-      "上課": ["尚課"],
-      "下課": ["夏課"],
-      "季節": ["季節", "既節"],
-      "小時": ["小事", "小市"],
-      "學校": ["雪校", "血校"],
-      "教室": ["較室", "教是"],
-      "操場": ["草場", "槽場"],
-      "餐廳": ["餐廳", "燦廳"],
-      "禮堂": ["李堂", "理堂"],
-      "課室": ["客室", "刻室"],
-      "公園": ["公員", "工園"],
-      "廁所": ["側所", "冊所"]
-    };
-
-    // 💡 繁簡體對照轉換表（實現繁簡互通）
+    // 💡 繁簡體轉換表
     const tradChars = "陰陽雲霧颱風涼濕傾佈時候週節國聖誕復萬獨廣廳驗園戲館樂醫警鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦蟹襪褲襯衫裙錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫助對認識變選擇視頻電腦顯示號紙筆尺張個隻條塊歲幾麼還與或輕重長短遠近難溫壞圓彎寬窄暗滿興奮氣憤怒驚訝尷尬無奈緊張處區灣臺門奧華軍銀綠藍黃懶頑活溫強弱嚇靜悶顯劃話";
-    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医警铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾蟹袜裤衬衫裙表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进来产亲带帮助对认识变选择视频电脑显示号纸笔尺张个只条块岁几么还与或轻重长短远近难温坏圆弯宽窄暗满兴奋气愤怒惊讶尴尬无奈紧张处区湾台门奥华军银绿蓝黄懒顽活温强弱吓静闷显划话";
+    const simpChars = "阴阳云雾台风凉湿倾布时候周节国圣诞复万独广厅验园戏馆乐医警铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾蟹袜裤衬衫裙表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进来产亲带帮助对认识变选择视频电脑显示号纸笔尺张个只条块岁几麼还与或轻重长短远近难温坏圆弯宽窄暗满兴奋气愤怒惊讶尴尬无奈紧张处区湾台门奥华军银绿蓝黄懒顽活温强弱吓静闷显划话";
 
     function toSimplified(str) {
       if (!str) return '';
       let result = '';
       for (let char of str) {
         const idx = tradChars.indexOf(char);
-        if (idx !== -1) {
-          result += simpChars[idx];
-        } else {
-          result += char;
-        }
+        result += idx !== -1 ? simpChars[idx] : char;
       }
       return result;
     }
@@ -410,30 +382,85 @@
       } catch(e) {}
     }
 
-    // 💡 智能繁簡體 + 同音匹配演算法
+    // 💡 獲取帶聲調的標準漢語拼音（供錯詞學習卡使用）
+    function getStandardPinyin(word) {
+      if (window.pinyinPro) {
+        try {
+          return pinyinPro.pinyin(word, { toneType: 'symbol', type: 'string' });
+        } catch(e) {}
+      }
+      return '';
+    }
+
+    // 💡 提取文字的發音模糊拼音（自動模糊常見混淆韻母/聲母）
+    function getFuzzyPinyin(str) {
+      if (!window.pinyinPro || !str) return '';
+      try {
+        const py = pinyinPro.pinyin(str, { toneType: 'none', type: 'array' }).join('');
+        return py.toLowerCase()
+          .replace(/ing/g, 'in')
+          .replace(/eng/g, 'en')
+          .replace(/ang/g, 'an')
+          .replace(/ian/g, 'ian')
+          .replace(/zh/g, 'z')
+          .replace(/ch/g, 'c')
+          .replace(/sh/g, 's')
+          .replace(/l/g, 'l')
+          .replace(/n/g, 'l')
+          .replace(/[^a-z]/g, '');
+      } catch(e) {
+        return '';
+      }
+    }
+
+    // 💡 編輯距離演算法 (Levenshtein Distance)
+    function levenshteinDistance(a, b) {
+      if (!a || !b) return (a || b).length;
+      const matrix = [];
+      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          if (b.charAt(i - 1) === a.charAt(j - 1)) {
+            matrix[i][j] = matrix[i - 1][j - 1];
+          } else {
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j - 1] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j] + 1
+            );
+          }
+        }
+      }
+      return matrix[b.length][a.length];
+    }
+
+    // 💡 智能匹配演算法：簡繁互通 + 拼音相似度 + 包含比對
     function checkMatch(heard, target) {
       if (!heard || !target) return false;
       
-      // 統一轉為簡體進行正規化比對
       const simpHeard = toSimplified(heard);
       const simpTarget = toSimplified(target);
 
-      // 1. 完全包含比對 (例如: "阴天".includes("阴天"))
       if (simpHeard.includes(simpTarget) || simpTarget.includes(simpHeard)) return true;
 
-      // 2. 清除標點符號後比對
       const cleanHeard = simpHeard.replace(/[^\u4e00-\u9fa5]/g, '');
       const cleanTarget = simpTarget.replace(/[^\u4e00-\u9fa5]/g, '');
       if (cleanHeard.includes(cleanTarget) || cleanTarget.includes(cleanHeard)) return true;
 
-      // 3. 同音詞字典相容性比對 (同音字詞庫亦統一轉簡體比對)
-      if (homophoneMap[target]) {
-        const aliases = Array.isArray(homophoneMap[target]) ? homophoneMap[target] : [homophoneMap[target]];
-        for (let alias of aliases) {
-          const simpAlias = toSimplified(alias);
-          if (cleanHeard.includes(simpAlias) || simpAlias.includes(cleanHeard)) {
-            return true;
-          }
+      const pyHeard = getFuzzyPinyin(cleanHeard);
+      const pyTarget = getFuzzyPinyin(cleanTarget);
+
+      if (pyHeard && pyTarget) {
+        const dist = levenshteinDistance(pyHeard, pyTarget);
+        const maxLen = Math.max(pyHeard.length, pyTarget.length);
+        const similarity = (maxLen - dist) / maxLen;
+        
+        console.log(`拼音比對：[${pyHeard}] vs [${pyTarget}]，相似度: ${(similarity * 100).toFixed(1)}%`);
+
+        if (similarity >= 0.60) {
+          return true;
         }
       }
 
@@ -459,6 +486,7 @@
       }, 300);
     }
 
+    // 💡 讀錯時觸發：獲取該詞標準拼音並顯示在學習卡上
     function handleFail(targetWord, heardText) {
       playFailBuzz();
       document.getElementById('flashcard').className = 'flashcard wrong';
@@ -475,13 +503,22 @@
 
       stopChallenge();
 
+      // 💡 自動生成帶聲調的標準漢語拼音
+      const targetPinyin = getStandardPinyin(targetWord);
+
       const resultBox = document.getElementById('result-box');
       const resultTitle = document.getElementById('result-title');
       const resultInfo = document.getElementById('result-info');
 
       resultTitle.innerText = isNewRecord ? "🎉 恭喜刷新最高紀錄！" : "🎯 挑戰結束";
+      
       resultInfo.innerHTML = `
-        認讀【<span style="color:#e74c3c">${targetWord}</span>】時停止（聽到："${heardText}"）。<br><br>
+        <div class="learn-card">
+          <div style="font-size: 15px; color: #7f8c8d; margin-bottom: 5px;">📖 溫馨提示（學習卡）：</div>
+          <div class="learn-word">${targetWord}</div>
+          <div class="learn-pinyin">[ ${targetPinyin} ]</div>
+        </div>
+        ${heardText ? `<span style="font-size: 15px; color: #95a5a6;">(剛才系統聽到的是："${heardText}")</span><br><br>` : ''}
         📚 本次共成功認讀了 <b>${count}</b> 個詞語！<br>
         ${isNewRecord ? "🌟 成功創下新的個人最高紀錄！" : "繼續加油，超越最高紀錄！"}
       `;
