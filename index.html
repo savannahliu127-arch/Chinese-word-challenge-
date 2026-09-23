@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>900 詞語認讀大挑戰 (全詞庫繁簡通吃版)</title>
-  <!-- 💡 引入拼音解析庫，自動生成帶聲調標準拼音 -->
+  <title>900 詞語認讀大挑戰 (進度存檔與錯題學習版)</title>
   <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.19.6/dist/index.js"></script>
   <style>
     * { box-sizing: border-box; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
@@ -49,11 +48,7 @@
       font-size: 14px;
       margin-left: 8px;
     }
-    .progress-bar {
-      font-size: 16px;
-      color: #666;
-      margin-bottom: 15px;
-    }
+    .progress-bar { font-size: 16px; color: #666; margin-bottom: 15px; }
     .flashcard {
       background: #f7f9fc;
       border: 4px solid #4a90e2;
@@ -69,33 +64,48 @@
     .flashcard.wrong { border-color: #e74c3c; background: #fadbd8; }
     .word { font-size: 64px; font-weight: bold; color: #2c3e50; letter-spacing: 2px; }
     .status-text { font-size: 18px; min-height: 28px; color: #7f8c8d; margin-bottom: 20px; }
+    
     .btn {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: bold;
-      padding: 14px 36px;
+      padding: 12px 30px;
       border: none;
       border-radius: 50px;
       cursor: pointer;
       background: #4a90e2;
       color: white;
       box-shadow: 0 4px 15px rgba(74, 144, 226, 0.4);
+      margin: 5px;
       transition: transform 0.1s, background 0.3s;
     }
     .btn:active { transform: scale(0.96); }
-    .btn-secondary { background: #95a5a6; box-shadow: none; font-size: 16px; padding: 8px 18px; margin-top: 15px; }
+    .btn-success { background: #2ecc71; box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4); }
+    .btn-warning { background: #f39c12; box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4); }
+    .btn-danger { background: #e74c3c; box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4); }
+    .btn-secondary { background: #95a5a6; box-shadow: none; font-size: 16px; padding: 8px 18px; }
 
-    .result-box {
+    /* 彈窗 Modal 樣式 */
+    .modal-overlay {
       display: none;
-      background: #fff;
-      border-radius: 20px;
-      padding: 25px;
-      margin-top: 20px;
-      border: 2px solid #3498db;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
     }
-    .result-title { font-size: 26px; color: #2980b9; font-weight: bold; margin-bottom: 10px; }
-    .result-info { font-size: 18px; color: #2c3e50; line-height: 1.6; }
+    .modal-content {
+      background: white;
+      border-radius: 24px;
+      padding: 25px;
+      max-width: 500px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
 
-    /* 錯詞拼音學習卡 */
+    /* 學習卡與總結樣式 */
     .learn-card {
       background: #fef9e7;
       border: 2px dashed #f39c12;
@@ -104,7 +114,28 @@
       margin: 15px 0;
     }
     .learn-word { font-size: 32px; font-weight: bold; color: #e74c3c; }
-    .learn-pinyin { font-size: 24px; font-weight: bold; color: #d35400; margin-top: 4px; letter-spacing: 1px; }
+    .learn-pinyin { font-size: 24px; font-weight: bold; color: #d35400; margin-top: 4px; }
+
+    .wrong-words-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 10px;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 12px;
+    }
+    .wrong-tag {
+      background: #fadbd8;
+      border: 1px solid #e74c3c;
+      border-radius: 10px;
+      padding: 6px 12px;
+      font-size: 16px;
+      color: #c0392b;
+    }
   </style>
 </head>
 <body>
@@ -122,20 +153,51 @@
 
     <div class="status-text" id="status-text">點擊按鈕開始認讀</div>
 
-    <button class="btn" id="start-btn" onclick="toggleChallenge()">開始挑戰</button>
+    <button class="btn" id="start-btn" onclick="handleClickStart()">開始挑戰</button>
     <br>
-    <button class="btn btn-secondary" id="skip-btn" onclick="skipWord()" style="display:none;">跳過此詞</button>
+    <button class="btn btn-secondary" id="skip-btn" onclick="skipWord()" style="display:none; margin-top:10px;">跳過此詞</button>
 
-    <div class="result-box" id="result-box">
-      <div class="result-title" id="result-title">🎯 挑戰結束！</div>
-      <div class="result-info" id="result-info"></div>
+    <!-- 結算報告區塊 -->
+    <div class="result-box" id="result-box" style="display:none; margin-top:20px;">
+      <div id="result-title" style="font-size:24px; font-weight:bold; color:#2980b9; margin-bottom:10px;">🎯 認讀總結</div>
+      <div id="result-info" style="font-size:18px; color:#2c3e50; line-height:1.6;"></div>
+    </div>
+  </div>
+
+  <!-- 💡 讀錯時的 3 選項彈窗 -->
+  <div class="modal-overlay" id="fail-modal">
+    <div class="modal-content">
+      <div style="font-size: 22px; font-weight: bold; color: #e74c3c; margin-bottom: 10px;">💡 認讀小提示</div>
+      <div class="learn-card">
+        <div style="font-size: 14px; color: #7f8c8d;">這個詞語的標準讀音是：</div>
+        <div class="learn-word" id="modal-word">晴朗</div>
+        <div class="learn-pinyin" id="modal-pinyin">[ qíng lǎng ]</div>
+      </div>
+      <div style="font-size: 16px; color: #7f8c8d; margin-bottom: 15px;" id="modal-heard"></div>
+      
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button class="btn btn-success" onclick="choiceContinue()">💪 繼續挑戰 (重試此詞)</button>
+        <button class="btn btn-warning" onclick="choiceRestart()">🔄 重新挑戰 (從頭開始)</button>
+        <button class="btn btn-danger" onclick="choiceEnd()">🏁 結束挑戰 (查看結算)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 💡 開局檢測到存檔時的彈窗 -->
+  <div class="modal-overlay" id="save-modal">
+    <div class="modal-content">
+      <div style="font-size: 22px; font-weight: bold; color: #2980b9; margin-bottom: 15px;">📂 發現歷史存檔</div>
+      <div style="font-size: 18px; color: #34495e; margin-bottom: 20px;" id="save-modal-text">上次已挑戰到第 X 個詞，請問要繼續嗎？</div>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button class="btn btn-success" onclick="loadSavedProgress()">繼續上次進度</button>
+        <button class="btn btn-warning" onclick="startNewGame()">全新開始</button>
+      </div>
     </div>
   </div>
 
   <script>
-    // 💡 覆蓋 889 詞庫中所有 282 個繁簡漢字對照表（確保 100% 繁簡完全互通）
     const tradChars = "陰陽雲霧颱風涼濕傾佈時週節國聖誕復萬獨廣廳驗園戲館樂醫鐵車場雜裝歐亞葉邊灘島嶺極腳體網買聽療聰髒齊亂勞歡驚懼飽餓麵條乾淨豬雞龜龍鷹蟻蟲蠅蝦襪褲襯錶鏈纜飛郵辦號線點畫圖書寫讀說話學習語練頭臉雙裏愛問讓開關動進過來產親帶幫對認識變選擇視頻電腦顯紙筆張個隻塊歲幾麼還與輕長遠難溫壞圓灣寬滿興奮氣憤訝尷無緊處區門奧華軍銀綠藍黃懶頑強嚇靜悶劃閃熱後擺隨總結實聯絡續繼斷換轉機碼質數據設備資訊報確證發現獲勝敗頂頸蓋貓鴨馬鳥魚獅鯨烏鯊鵝鱷倉蜴蒼賣掃賽飯夢潛聞題課騎單彈鋼運遊籃欖購淚軟簡骯麗潑壯惡鮮餅腸壽檸薩櫻獼異鉛膠壺貼冊獎顏達傘鐘廁簾錢潔燈調鏡應項鍊環飾紅淺噴飄騰傷羨積覺顆";
-    const simpChars = "阴阳云雾台风凉湿倾布时周节国圣诞复万独广厅验园戏馆乐医铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾袜裤衬表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进过来产亲带帮对认识变选择视频电脑显纸笔张个只块岁几么还与轻长远难温坏圆湾宽满兴奋气愤讶尴无紧处区门奥华军银绿蓝黄懒顽强吓静闷划闪热后摆随总结实联络续继断换转机码质数据设备资讯报确证发现获胜败顶颈盖猫鸭马鸟鱼狮鲸乌鲨鹅鳄仓蜥苍卖扫赛饭梦潜闻题课骑单弹钢运游篮榄购泪软简肮丽泼壮恶鲜饼肠寿柠萨樱猕异铅胶壶贴册奖颜达伞钟厕帘钱洁灯调镜应项链环饰红浅喷飘腾伤羡积觉颗";
+    const simpChars = "阴阳云雾台风凉湿倾布时周节国圣诞复万独广厅验园戏馆乐医铁车场杂装欧亚叶边滩岛岭极脚体网买听疗聪脏齐乱劳欢惊惧饱饿面条干净猪鸡龟龙鹰蚁虫蝇虾袜裤衬表链缆飞邮办号线点画图书写读说话学习语练头脸双里爱问让开关动进过来产亲带帮对认识变选择视频电脑显纸笔张个只块岁几么还与轻长远难温坏圆弯宽满兴奋气愤讶尴无紧处区门奥华军银绿蓝黄懒顽强吓静闷划闪热后摆随总结实联络续继断换转机码质数据设备资讯报确证发现获胜败顶颈盖猫鸭马鸟鱼狮鲸乌鲨鹅鳄仓蜥苍卖扫赛饭梦潜闻题课骑单弹钢运游篮榄购泪软简肮丽泼壮恶鲜饼肠寿柠萨樱猕异铅胶壶贴册奖颜达伞钟厕帘钱洁灯调镜应项链环饰红浅喷飘腾伤羡积觉颗";
 
     function toSimplified(str) {
       if (!str) return '';
@@ -147,7 +209,6 @@
       return result;
     }
 
-    // 889 個詞語庫
     const wordList = [
       "晴天", "雨天", "陰天", "大霧", "下雨", "打雷", "晴朗", "冰雹", "太陽", "下雪", "月亮", "星星", "彩虹", "閃電", "颱風", 
       "涼快的", "寒冷的", "雲霧", "霧霾", "刮風", "潮濕的", "炎熱的", "傾盆大雨", "烏雲密佈", "陽光明媚", "今天", "昨天", 
@@ -218,8 +279,12 @@
     let isChallenging = false;
     let recognition = null;
     let audioContext = null;
+    
+    // 💡 紀錄本次挑戰中出錯的詞語 (Set 防重複)
+    let sessionWrongWords = new Set();
+    let currentFailedWord = "";
+    let currentHeardText = "";
 
-    // 🔊 雙音階歡慶聲效
     function playSuccessChime() {
       try {
         const ctx = audioContext || new (window.AudioContext || window.webkitAudioContext)();
@@ -269,6 +334,10 @@
       return parseInt(savedScore);
     }
 
+    function saveProgress() {
+      localStorage.setItem('vocab_saved_index', currentIndex);
+    }
+
     function updateCard() {
       if (currentIndex >= wordList.length) {
         endChallenge(true);
@@ -278,17 +347,38 @@
       document.getElementById('word-display').innerText = wordList[currentIndex];
       document.getElementById('count-display').innerText = `📚 本次認讀：${currentIndex} 個詞`;
       document.getElementById('flashcard').className = 'flashcard';
+      saveProgress(); // 每次刷新卡片自動存檔進度
     }
 
-    function toggleChallenge() {
+    // 💡 點擊「開始挑戰」按鈕的處理邏輯
+    function handleClickStart() {
       if (isChallenging) {
         stopChallenge();
       } else {
-        startChallenge();
+        const savedIdx = parseInt(localStorage.getItem('vocab_saved_index') || '0');
+        if (savedIdx > 0 && savedIdx < wordList.length) {
+          document.getElementById('save-modal-text').innerText = `檢測到上次挑戰到了第 ${savedIdx + 1} 個詞【${wordList[savedIdx]}】，請問要繼續嗎？`;
+          document.getElementById('save-modal').style.display = 'flex';
+        } else {
+          startNewGame();
+        }
       }
     }
 
-    function startChallenge() {
+    function loadSavedProgress() {
+      document.getElementById('save-modal').style.display = 'none';
+      currentIndex = parseInt(localStorage.getItem('vocab_saved_index') || '0');
+      startChallengeProcess();
+    }
+
+    function startNewGame() {
+      document.getElementById('save-modal').style.display = 'none';
+      currentIndex = 0;
+      sessionWrongWords.clear();
+      startChallengeProcess();
+    }
+
+    function startChallengeProcess() {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SpeechRecognition) {
         alert("您的瀏覽器不支援原生語音辨識，請務必使用 iPad Safari 瀏覽器開啓此網頁！");
@@ -298,7 +388,6 @@
       if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
       if (audioContext.state === 'suspended') audioContext.resume();
 
-      currentIndex = 0;
       isChallenging = true;
       document.getElementById('result-box').style.display = 'none';
       document.getElementById('start-btn').innerText = '結束挑戰';
@@ -343,7 +432,7 @@
         if (checkMatch(heardText, targetWord)) {
           handleSuccess();
         } else {
-          handleFail(targetWord, heardText);
+          handleFailPrompt(targetWord, heardText);
         }
       };
 
@@ -372,7 +461,6 @@
       } catch(e) {}
     }
 
-    // 💡 獲取帶聲調的標準漢語拼音
     function getStandardPinyin(word) {
       if (window.pinyinPro) {
         try {
@@ -382,7 +470,6 @@
       return '';
     }
 
-    // 💡 提取文字發音的模糊拼音
     function getFuzzyPinyin(str) {
       if (!window.pinyinPro || !str) return '';
       try {
@@ -403,7 +490,6 @@
       }
     }
 
-    // 💡 編輯距離演算法
     function levenshteinDistance(a, b) {
       if (!a || !b) return (a || b).length;
       const matrix = [];
@@ -426,24 +512,19 @@
       return matrix[b.length][a.length];
     }
 
-    // 💡 智能匹配演算法：100% 精準繁簡通吃 + 拼音相似度 + 包含比對
     function checkMatch(heard, target) {
       if (!heard || !target) return false;
       
-      // 1. 原字（繁體）比對
       if (heard.includes(target) || target.includes(heard)) return true;
 
-      // 2. 簡體化比對（282 全字庫轉換）
       const simpHeard = toSimplified(heard);
       const simpTarget = toSimplified(target);
       if (simpHeard.includes(simpTarget) || simpTarget.includes(simpHeard)) return true;
 
-      // 3. 清理標點符號後比對
       const cleanHeard = simpHeard.replace(/[^\u4e00-\u9fa5]/g, '');
       const cleanTarget = simpTarget.replace(/[^\u4e00-\u9fa5]/g, '');
       if (cleanHeard.includes(cleanTarget) || cleanTarget.includes(cleanHeard)) return true;
 
-      // 4. 拼音相似度比對（Levenshtein distance >= 60%）
       const pyHeard = getFuzzyPinyin(cleanHeard);
       const pyTarget = getFuzzyPinyin(cleanTarget);
 
@@ -481,41 +562,49 @@
       }, 300);
     }
 
-    function handleFail(targetWord, heardText) {
+    // 💡 讀錯時彈出 3 選項對話框
+    function handleFailPrompt(targetWord, heardText) {
       playFailBuzz();
       document.getElementById('flashcard').className = 'flashcard wrong';
       
-      const count = currentIndex;
-      const currentMax = loadHighScore();
-      let isNewRecord = false;
+      // 記錄進錯題集
+      sessionWrongWords.add(targetWord);
+      currentFailedWord = targetWord;
+      currentHeardText = heardText;
 
-      if (count > currentMax) {
-        localStorage.setItem('vocab_challenge_max', count);
-        loadHighScore();
-        isNewRecord = true;
+      // 暫停語音監聽
+      if (recognition) {
+        recognition.onend = null;
+        try { recognition.stop(); } catch(e) {}
       }
 
-      stopChallenge();
+      // 填充 Modal 內容
+      document.getElementById('modal-word').innerText = targetWord;
+      document.getElementById('modal-pinyin').innerText = `[ ${getStandardPinyin(targetWord)} ]`;
+      document.getElementById('modal-heard').innerText = heardText ? `(剛才系統聽到的是："${heardText}")` : '(未檢測到清晰語音)';
+      document.getElementById('fail-modal').style.display = 'flex';
+    }
 
-      const targetPinyin = getStandardPinyin(targetWord);
+    // 💡 彈窗選項 1: 繼續挑戰 (重試當前詞)
+    function choiceContinue() {
+      document.getElementById('fail-modal').style.display = 'none';
+      document.getElementById('flashcard').className = 'flashcard';
+      initSpeechRecognition();
+    }
 
-      const resultBox = document.getElementById('result-box');
-      const resultTitle = document.getElementById('result-title');
-      const resultInfo = document.getElementById('result-info');
+    // 💡 彈窗選項 2: 重新挑戰 (從頭開始)
+    function choiceRestart() {
+      document.getElementById('fail-modal').style.display = 'none';
+      currentIndex = 0;
+      sessionWrongWords.clear();
+      updateCard();
+      initSpeechRecognition();
+    }
 
-      resultTitle.innerText = isNewRecord ? "🎉 恭喜刷新最高紀錄！" : "🎯 挑戰結束";
-      
-      resultInfo.innerHTML = `
-        <div class="learn-card">
-          <div style="font-size: 15px; color: #7f8c8d; margin-bottom: 5px;">📖 溫馨提示（學習卡）：</div>
-          <div class="learn-word">${targetWord}</div>
-          <div class="learn-pinyin">[ ${targetPinyin} ]</div>
-        </div>
-        ${heardText ? `<span style="font-size: 15px; color: #95a5a6;">(剛才系統聽到的是："${heardText}")</span><br><br>` : ''}
-        📚 本次共成功認讀了 <b>${count}</b> 個詞語！<br>
-        ${isNewRecord ? "🌟 成功創下新的個人最高紀錄！" : "繼續加油，超越最高紀錄！"}
-      `;
-      resultBox.style.display = 'block';
+    // 💡 彈窗選項 3: 結束挑戰 (查看結算報告)
+    function choiceEnd() {
+      document.getElementById('fail-modal').style.display = 'none';
+      showFinalSummary();
     }
 
     function skipWord() {
@@ -527,6 +616,48 @@
       currentIndex++;
       updateCard();
       initSpeechRecognition();
+    }
+
+    // 💡 顯示最終總結（包含正確數量與錯詞本）
+    function showFinalSummary() {
+      stopChallenge();
+
+      const count = currentIndex;
+      const currentMax = loadHighScore();
+      let isNewRecord = false;
+
+      if (count > currentMax) {
+        localStorage.setItem('vocab_challenge_max', count);
+        loadHighScore();
+        isNewRecord = true;
+      }
+
+      const resultBox = document.getElementById('result-box');
+      const resultTitle = document.getElementById('result-title');
+      const resultInfo = document.getElementById('result-info');
+
+      resultTitle.innerText = isNewRecord ? "🎉 恭喜刷新最高紀錄！" : "🎯 本次認讀成果總結";
+      
+      let wrongWordsHTML = "";
+      if (sessionWrongWords.size > 0) {
+        wrongWordsHTML = `
+          <div style="margin-top: 15px; text-align: left;">
+            <div style="font-weight: bold; color: #c0392b; font-size: 16px;">❌ 本次遇到的難點詞語（複習錯題集）：</div>
+            <div class="wrong-words-grid">
+              ${Array.from(sessionWrongWords).map(w => `<div class="wrong-tag"><b>${w}</b> <span style="font-size:13px; color:#7f8c8d;">(${getStandardPinyin(w)})</span></div>`).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        wrongWordsHTML = `<div style="margin-top: 10px; color: #27ae60; font-weight: bold;">🌟 太棒了！本次挑戰全程零失誤！</div>`;
+      }
+
+      resultInfo.innerHTML = `
+        📚 本次共成功認讀了 <b>${count}</b> 個詞語！<br>
+        ${isNewRecord ? "🌟 成功創下新的個人最高紀錄！" : "繼續加油，超越最高紀錄！"}
+        ${wrongWordsHTML}
+      `;
+      resultBox.style.display = 'block';
     }
 
     function endChallenge(isWin) {
